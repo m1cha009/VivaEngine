@@ -1,11 +1,15 @@
 // The sandbox: a small test program that uses the engine the way a game would.
 // It includes only engine headers (Viva/...) and GLM, never SDL or Vulkan.
 
+#include "FlyCamera.h"
+
 #include "Viva/Application.h"
 #include "Viva/Assert.h"
 #include "Viva/Input.h"
 #include "Viva/Log.h"
 #include "Viva/Time.h"
+
+#include <glm/trigonometric.hpp>
 
 #include <cstdint>
 #include <cstdlib>
@@ -34,12 +38,18 @@ public:
 protected:
     void OnStart() override
     {
-        Log::Info("Press keys and mouse buttons to see them logged. Esc quits.");
+        // Start a little above the floor and back from the middle, looking slightly down.
+        Camera& camera = GetCamera();
+        camera.Position = { 0.0f, 3.0f, 9.0f };
+        camera.Pitch = glm::radians(-12.0f);
+
+        Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
+                  "around. Esc quits.");
     }
 
     void OnUpdate(float dt) override
     {
-        LogInput();
+        m_FlyCamera.Update(GetCamera(), dt);
 
         const bool timeIsUp = m_QuitAfter > 0.0f && Time::SinceStart() >= m_QuitAfter;
         if (Input::GetKeyDown(Key::Escape) || timeIsUp)
@@ -69,36 +79,7 @@ protected:
     }
 
 private:
-    static void LogInput()
-    {
-        // Checking every key code each frame is a few hundred array reads: fine for a demo.
-        for (uint16_t code = 1; code <= static_cast<uint16_t>(Key::RightMeta); ++code) {
-            const Key key = static_cast<Key>(code);
-            if (Input::GetKeyDown(key))
-                Log::Info("Key down: {}", Input::GetKeyName(key));
-            if (Input::GetKeyUp(key))
-                Log::Info("Key up:   {}", Input::GetKeyName(key));
-        }
-
-        struct NamedButton {
-            MouseButton Button;
-            const char* Name;
-        };
-        constexpr NamedButton kButtons[] = {
-            { MouseButton::Left, "Left" }, { MouseButton::Right, "Right" }, { MouseButton::Middle, "Middle" }
-        };
-        const glm::vec2 position = Input::MousePosition();
-        for (const NamedButton& button : kButtons) {
-            if (Input::GetMouseButtonDown(button.Button))
-                Log::Info("Mouse {} down at ({:.0f}, {:.0f})", button.Name, position.x, position.y);
-            if (Input::GetMouseButtonUp(button.Button))
-                Log::Info("Mouse {} up", button.Name);
-        }
-
-        if (Input::MouseScroll() != 0.0f)
-            Log::Info("Mouse wheel: {:+.1f}", Input::MouseScroll());
-    }
-
+    FlyCamera m_FlyCamera;
     float m_QuitAfter = 0.0f;
     float m_SecondTimer = 0.0f;
     uint32_t m_FramesThisSecond = 0;

@@ -1,5 +1,7 @@
 # The sandbox: an executable that uses the engine the way a game would.
-add_executable(Sandbox src/Main.cpp)
+add_executable(Sandbox
+    src/FlyCamera.cpp
+    src/Main.cpp)
 
 # Linking VivaEngine also brings in everything the engine declared PUBLIC: its include/
 # folder, C++20, GLM and the VIVA_DEBUG define. SDL3 and Vulkan get linked into the .exe, but

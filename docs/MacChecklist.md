@@ -106,3 +106,17 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       and going clockwise: red, yellow, green, cyan, blue, magenta.
 - [ ] Quitting with Esc gives exit code 0 and no "Some allocations were not freed" assert (VMA's
       leak check).
+
+## M6: 3D: transforms, depth, camera
+
+- [ ] **(CI)** The scene renders under MoltenVK with validation silent, including
+      synchronization validation of the shared depth buffer.
+- [ ] `VK_FORMAT_D32_SFLOAT` is accepted as the depth format (no "no 32-bit float depth buffer"
+      line when the GPU is picked).
+- [ ] The scene looks the same as on Windows: correct depth, no missing or inside-out faces
+      (counter-clockwise front faces with the projection's y flip).
+- [ ] **Mouse look:** holding the right mouse button (or a two-finger click on a trackpad) hides
+      the cursor and turns the view smoothly. Releasing it brings the cursor back. Check the
+      turning speed on a Retina screen, where SDL reports deltas in points.
+- [ ] Resize and full screen rebuild the depth buffer at the new pixel size, with no validation
+      output.

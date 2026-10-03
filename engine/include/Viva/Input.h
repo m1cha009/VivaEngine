@@ -56,6 +56,11 @@ public:
 
     // A readable name such as "W", "Space" or "Left Shift", for logs and UI.
     static std::string_view GetKeyName(Key key);
+
+    // Locked: the cursor is hidden and stays put, while MouseDelta() keeps reporting movement, so
+    // mouse look can turn forever without the cursor hitting the screen's edge. Like setting
+    // Unity's Cursor.lockState to Locked. It only takes effect while the window has focus.
+    static void SetCursorLocked(bool locked);
 };
 
 } // namespace Viva

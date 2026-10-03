@@ -86,11 +86,14 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
         .pDynamicStates = dynamicStates,
     };
 
-    // Filled triangles, both sides visible for now (Unity's "Cull Off"). M6 turns culling on.
+    // Filled triangles, culled as the settings say. A triangle's front is the side from which its
+    // corners appear counter-clockwise on screen: the convention of glTF and OpenGL-style tools.
+    // (Unity uses clockwise.)
     const VkPipelineRasterizationStateCreateInfo rasterization {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = VK_CULL_MODE_NONE,
+        .cullMode = settings.CullMode,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .lineWidth = 1.0f,
     };
 
@@ -112,17 +115,36 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
         .pAttachments = &blendAttachment,
     };
 
+    // Depth testing, when there's a depth buffer: each pixel stores the depth of what was drawn
+    // there, and a new pixel is only drawn (and its depth stored) if it's at least as near, that
+    // is LESS_OR_EQUAL (Unity's default "ZTest LEqual"). Without a depth buffer this is off, and
+    // later draws simply cover earlier ones.
+    const bool depth = settings.DepthFormat != VK_FORMAT_UNDEFINED;
+    const VkPipelineDepthStencilStateCreateInfo depthStencil {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = depth ? VK_TRUE : VK_FALSE,
+        .depthWriteEnable = depth ? VK_TRUE : VK_FALSE,
+        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+    };
+
     // Dynamic rendering: instead of pointing at a VkRenderPass, the pipeline just states the
-    // format of the image(s) it will draw into.
+    // formats of the images it will draw into.
     const VkPipelineRenderingCreateInfo rendering {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = 1,
         .pColorAttachmentFormats = &settings.ColorFormat,
+        .depthAttachmentFormat = settings.DepthFormat,
     };
 
     auto pipeline = std::make_unique<Pipeline>(device);
 
-    const VkPipelineLayoutCreateInfo layoutInfo { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+    const VkPipelineLayoutCreateInfo layoutInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = static_cast<uint32_t>(settings.DescriptorSetLayouts.size()),
+        .pSetLayouts = settings.DescriptorSetLayouts.data(),
+        .pushConstantRangeCount = static_cast<uint32_t>(settings.PushConstantRanges.size()),
+        .pPushConstantRanges = settings.PushConstantRanges.data(),
+    };
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline->m_Layout));
 
     const VkGraphicsPipelineCreateInfo createInfo {
@@ -135,6 +157,7 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
         .pViewportState = &viewport,
         .pRasterizationState = &rasterization,
         .pMultisampleState = &multisample,
+        .pDepthStencilState = &depthStencil,
         .pColorBlendState = &colorBlend,
         .pDynamicState = &dynamic,
         .layout = pipeline->m_Layout,

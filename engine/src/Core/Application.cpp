@@ -90,7 +90,7 @@ int Application::Run()
 
         // Last, like in Unity: draw the frame the game just updated. With vsync on, this is also
         // where the loop waits for the display.
-        m_Renderer->DrawFrame();
+        m_Renderer->DrawFrame(m_Camera);
     }
 
     OnShutdown();

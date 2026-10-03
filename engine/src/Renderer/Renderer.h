@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 // Vulkan's command buffer handle type, declared without vulkan.h (Window.h does the same for the
 // instance and surface).
@@ -12,7 +11,10 @@ struct VkCommandBuffer_T;
 
 namespace Viva {
 
+struct Camera;
 class FrameResources;
+class FrameUniforms;
+class Image;
 class Mesh;
 class Pipeline;
 class Swapchain;
@@ -33,8 +35,9 @@ public:
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    // Draws one frame and shows it in the window. Does nothing while the window has no area.
-    void DrawFrame();
+    // Draws one frame, seen from `camera`, and shows it in the window. Does nothing while the
+    // window has no area.
+    void DrawFrame(const Camera& camera);
 
 private:
     bool RecreateSwapchain();
@@ -49,12 +52,16 @@ private:
     bool m_VSync = true;
 
     // Declared in creation order, so they're destroyed in reverse: meshes, pipeline, swapchain and
-    // frames first, the context (with the device they were made from) last.
+    // so on first, the context (with the device they were made from) last.
     std::unique_ptr<VulkanContext> m_Context;
     std::unique_ptr<FrameResources> m_Frames;
+    std::unique_ptr<FrameUniforms> m_FrameUniforms;
     std::unique_ptr<Swapchain> m_Swapchain;
+    std::unique_ptr<Image> m_DepthImage; // the swapchain images' size, so it's rebuilt with them
     std::unique_ptr<Pipeline> m_VertexColorPipeline;
-    std::vector<std::unique_ptr<Mesh>> m_Meshes; // M5's demo shapes (M8 moves drawing out)
+    // The demo scene's meshes (M8 moves "what to draw" into the game).
+    std::unique_ptr<Mesh> m_CubeMesh;
+    std::unique_ptr<Mesh> m_FloorMesh;
 
     Extent m_SwapchainWindowSize;    // the window's pixel size when the swapchain was built
     bool m_SwapchainOutdated = false; // set when Vulkan reports the swapchain no longer fits

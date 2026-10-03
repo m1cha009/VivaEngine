@@ -27,6 +27,8 @@ public:
     // The Vulkan version the engine is written for. The instance asks for it, a GPU must support
     // it, and libraries added later (VMA, ImGui) must be told the same version.
     static constexpr uint32_t kApiVersion = VK_API_VERSION_1_3;
+    // The depth buffer's format: one 32-bit float per pixel. Picking a GPU checks it's supported.
+    static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 
     // Creates all of the above, or returns nullptr (after logging why) if this machine can't run
     // the engine, for example because no GPU supports Vulkan 1.3.

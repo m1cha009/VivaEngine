@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Viva/Camera.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -68,8 +70,12 @@ protected:
     // Changes the text in the window's title bar.
     void SetWindowTitle(const std::string& title);
 
+    // The camera the renderer draws from. Move it in OnUpdate.
+    Camera& GetCamera() { return m_Camera; }
+
 private:
     ApplicationSettings m_Settings;
+    Camera m_Camera;
     std::unique_ptr<Window> m_Window;
     // Declared after m_Window, so it's destroyed first: members are destroyed in reverse order,
     // and the renderer's Vulkan surface belongs to the window.

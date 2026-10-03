@@ -2,6 +2,7 @@
 
 #include "Renderer/VulkanCheck.h"
 #include "Renderer/VulkanContext.h"
+#include "Renderer/VulkanHelpers.h"
 #include "Viva/Log.h"
 
 
@@ -140,19 +141,9 @@ std::unique_ptr<Swapchain> Swapchain::Create(const VulkanContext& context, VkExt
     swapchain->m_Images.resize(count);
     VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain->m_Swapchain, &count, swapchain->m_Images.data()));
 
-    for (VkImage image : swapchain->m_Images) {
-        const VkImageViewCreateInfo viewInfo {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = image,
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = format.format,
-            // The whole image: its color data, its only mip level and its only layer.
-            .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1 },
-        };
-        VkImageView view = VK_NULL_HANDLE;
-        VK_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &view));
-        swapchain->m_ImageViews.push_back(view);
-    }
+    // Rendering draws into an image through a view: here, each image's color data, whole.
+    for (VkImage image : swapchain->m_Images)
+        swapchain->m_ImageViews.push_back(CreateImageView(device, image, format.format, VK_IMAGE_ASPECT_COLOR_BIT));
 
     Log::Info("Swapchain: {}x{} pixels, {} images, {}, {}", extent.width, extent.height, count,
               VkFormatName(format.format), VkPresentModeName(presentMode));

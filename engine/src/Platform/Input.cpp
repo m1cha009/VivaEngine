@@ -51,6 +51,9 @@ glm::vec2 s_MousePosition { 0.0f };
 glm::vec2 s_MouseDelta { 0.0f };
 float s_MouseScroll = 0.0f;
 
+// The window whose cursor SetCursorLocked controls (see SetInputWindow).
+SDL_Window* s_Window = nullptr;
+
 std::size_t Index(MouseButton button) { return static_cast<std::size_t>(button); }
 
 // A key code outside the table (no real key sends one) reads as a key that's never pressed.
@@ -106,6 +109,19 @@ std::string_view Input::GetKeyName(Key key)
 {
     // SDL returns "" for codes it has no name for.
     return SDL_GetScancodeName(static_cast<SDL_Scancode>(key));
+}
+
+void Input::SetCursorLocked(bool locked)
+{
+    // SDL calls this "relative mouse mode". It only applies it while the window has keyboard
+    // focus, and does nothing when the state doesn't change, so calling it every frame is fine.
+    if (s_Window)
+        SDL_SetWindowRelativeMouseMode(s_Window, locked);
+}
+
+void SetInputWindow(SDL_Window* window)
+{
+    s_Window = window;
 }
 
 void BeginInputFrame()

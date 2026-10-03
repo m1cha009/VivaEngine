@@ -2,6 +2,7 @@
 
 #include "Platform/Window.h"
 #include "Renderer/VulkanCheck.h"
+#include "Renderer/VulkanHelpers.h"
 #include "Renderer/VulkanVersion.h"
 #include "Viva/Log.h"
 #include "Viva/Version.h"
@@ -191,6 +192,13 @@ DeviceInfo CheckDevice(VkPhysicalDevice device, VkSurfaceKHR surface)
     vkGetPhysicalDeviceFeatures2(device, &features);
     if (!features13.dynamicRendering || !features13.synchronization2)
         return fail("no dynamic rendering or synchronization2");
+
+    // The depth buffer's format (M6). Every desktop GPU supports it, but Vulkan doesn't promise
+    // it, so check. OPTIMAL tiling: the GPU's own image layout, which is what we create.
+    VkFormatProperties depthFormat {};
+    vkGetPhysicalDeviceFormatProperties(device, VulkanContext::kDepthFormat, &depthFormat);
+    if ((depthFormat.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) == 0)
+        return fail("no 32-bit float depth buffer");
 
     return info;
 }
@@ -479,24 +487,9 @@ void VulkanContext::LogMemoryUsage() const
 void VulkanContext::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& record) const
 {
     // A command pool and buffer just for this call. Creating them is cheap next to waiting for
-    // the GPU, and nothing is left over between calls. TRANSIENT: its command buffers are
-    // short-lived.
-    const VkCommandPoolCreateInfo poolInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        .queueFamilyIndex = m_GraphicsQueueFamily,
-    };
-    VkCommandPool pool = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateCommandPool(m_Device, &poolInfo, nullptr, &pool));
-
-    const VkCommandBufferAllocateInfo allocateInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    VK_CHECK(vkAllocateCommandBuffers(m_Device, &allocateInfo, &cmd));
+    // the GPU, and nothing is left over between calls.
+    const VkCommandPool pool = CreateCommandPool(m_Device, m_GraphicsQueueFamily);
+    const VkCommandBuffer cmd = AllocateCommandBuffer(m_Device, pool);
 
     const VkCommandBufferBeginInfo beginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -507,9 +500,7 @@ void VulkanContext::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
     // Submit, with a fence the GPU signals when it's done, and wait for it.
-    const VkFenceCreateInfo fenceInfo { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-    VkFence fence = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateFence(m_Device, &fenceInfo, nullptr, &fence));
+    const VkFence fence = CreateFence(m_Device, false);
     const VkCommandBufferSubmitInfo commandInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .commandBuffer = cmd,

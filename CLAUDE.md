@@ -238,9 +238,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M6 (3D: transforms, depth, camera) is next. Done: M0–M5 (2026-10-03).
-- **Verified on Windows:** M0–M5, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
-- **CI (macOS):** green through M4. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M7 (textures) is next. Done: M0–M6 (2026-10-03).
+- **Verified on Windows:** M0–M6, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
+- **CI (macOS):** green through M5. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -354,3 +354,39 @@ Append one line per decision: date, decision, reason.
     - Never call `ImmediateSubmit` during gameplay: its fence wait also waits for the frames in flight.
     - Move `Vertex`/`MeshData` to a header without Vulkan once the sandbox builds meshes.
   - Noted for M9: a per-frame memory display should use `vmaGetHeapBudgets`. `vmaCalculateStatistics` is slow and meant for debugging.
+- 2026-10-03: M6 design:
+  - Conventions: right-handed, Y up, cameras look down −Z, counter-clockwise front faces. That's glTF's convention, for M11; Unity is left-handed with clockwise front faces.
+  - `Viva::Camera` is a public plain struct: Position, Yaw, Pitch, FieldOfView, Near and Far.
+    - `WorldMatrix()` is translate · rotateY(yaw) · rotateX(pitch). `ViewMatrix()` is its inverse. Forward and Right are columns of the world matrix. M10 will feed the same formula from a Transform.
+    - `ProjectionMatrix()` is GLM's OpenGL-style perspective with depth 0..1. The renderer flips y when it writes the uniforms (Unity's `GL.GetGPUProjectionMatrix`), so Camera stays free of Vulkan.
+  - `Application::GetCamera()` gives the game the camera, and `Renderer::DrawFrame(const Camera&)` reads it. M8 replaces this.
+  - Shader data:
+    - Push constants carry the model matrix (64 bytes, vertex stage).
+    - `FrameUniforms` holds the view and projection: one uniform buffer and one descriptor set per frame in flight, with its own layout and an exactly-sized pool. It's written right after the frame's fence wait.
+  - Depth:
+    - `Image` (VMA image + view) holds the depth buffer.
+    - `VulkanContext::kDepthFormat = D32_SFLOAT` is required in `CheckDevice`; it's portable, and Apple has no D24S8.
+    - The depth image is rebuilt in `RecreateSwapchain` and shared by both frames in flight. The barrier waits on EARLY|LATE_FRAGMENT_TESTS writes.
+    - Clear to 1.0, store DONT_CARE, compare LESS_OR_EQUAL.
+  - `VulkanHelpers` holds the command pool, command buffer, fence, semaphore and image view creation helpers, plus `TransitionImage(cmd, ImageTransition{...})` with named fields and an aspect.
+  - `Input::SetCursorLocked` (Unity's `Cursor.lockState`) uses SDL relative mouse mode. Window registers its `SDL_Window*` through `Platform/InputEvents.h`. SDL only applies it while the window has keyboard focus, so scripted test windows can't grab the cursor.
+  - The sandbox's `FlyCamera`: WASD/QE always active, Shift ×3, right mouse button to look, pitch clamped to ±89°. M1's key logging was removed from the sandbox.
+- 2026-10-03: Test harness limit found in M6: SDL checks the physical mouse button's state, so posted right-button drags are released at once. Mouse look can't be scripted without moving the real cursor, which is off-limits. It's verified by its math, and Michail tries it.
+- 2026-10-03: M6 `/simplify` pass:
+  - `CreateImageView` is shared by Swapchain and Image.
+  - The Vulkan y flip moved from Camera into the renderer.
+  - Camera builds a world matrix instead of `lookAt`, which has no singularity at ±90° pitch.
+  - Cursor lock is `Input::SetCursorLocked` rather than an Application method, and FlyCamera owns its whole look behaviour.
+  - `AddQuad` holds the counter-clockwise index order for Cube and Floor.
+  - The vertex shader multiplies right to left (matrix × vector).
+  - Depth compare is LESS_OR_EQUAL.
+  - The pillar ring is turned by half a step so the cube is visible from the start position.
+  - Deferred to M7:
+    - mip ranges in `ImageTransition` and `CreateImageView` (the mips half of the M3 item);
+    - descriptor helpers (layout and pool) shared by FrameUniforms and textures.
+  - Deferred to M8:
+    - Split `Mesh` bind from draw, and sort draws by pipeline, material and mesh.
+    - Every pipeline must share the set-0 layout and the identical push constant range, so set 0 stays bound across pipeline switches.
+    - Fold the per-frame uniform buffer and set into `FrameData`.
+    - Make the deferred-deletion queue a per-frame vector of `unique_ptr`s, not a `std::function` deque.
+    - Upload batches with a persistent pool and fence.

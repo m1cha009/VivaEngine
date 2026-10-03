@@ -50,6 +50,7 @@ std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width,
     SDL_ShowWindow(sdlWindow);
 
     auto window = std::make_unique<Window>(sdlWindow);
+    SetInputWindow(sdlWindow); // for Input::SetCursorLocked
     const Extent pixels = window->GetPixelSize();
     Log::Info("Window: {}x{} points, {}x{} pixels (display scale {:.2f}) on {}", width, height, pixels.Width,
               pixels.Height, SDL_GetWindowDisplayScale(sdlWindow), SDL_GetDisplayName(displayId));
@@ -65,6 +66,7 @@ Window::Window(SDL_Window* window)
 // runs automatically when the object is destroyed (here: when Application resets its unique_ptr).
 Window::~Window()
 {
+    SetInputWindow(nullptr);
     SDL_DestroyWindow(m_Window);
     SDL_Quit();
 }
