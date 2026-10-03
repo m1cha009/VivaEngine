@@ -3,6 +3,9 @@ build/
 out/
 cmake-build-*/
 
+# Packaged per-milestone executables (scripts/package.cmd)
+dist/
+
 # Machine-specific CMake preset overrides
 CMakeUserPresets.json
 

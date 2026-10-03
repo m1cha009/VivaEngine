@@ -43,4 +43,9 @@ function(viva_compile_shaders target)
     # recompiles exactly the shaders whose source changed.
     add_custom_target(${target}Shaders DEPENDS ${spirvFiles} SOURCES ${ARGN})
     add_dependencies(${target} ${target}Shaders)
+
+    # A packaged build needs the compiled shaders next to the executable too.
+    if(spirvFiles)
+        install(FILES ${spirvFiles} DESTINATION shaders)
+    endif()
 endfunction()

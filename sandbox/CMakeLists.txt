@@ -11,3 +11,8 @@ viva_set_warnings(Sandbox)
 # GLSL files compiled to SPIR-V when the sandbox builds (see cmake/Shaders.cmake).
 # None yet. The first ones arrive in M4.
 viva_compile_shaders(Sandbox)
+
+# install() rules list what a player needs to run the game, like the output folder of a Unity
+# build. "cmake --install" copies them into one folder; scripts/package.cmd uses that to make
+# the per-milestone executables in dist/.
+install(TARGETS Sandbox RUNTIME DESTINATION .)
