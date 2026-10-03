@@ -6,7 +6,7 @@ A small game engine in C++20 and Vulkan 1.3, built one milestone at a time to le
 engines work.
 
 - [`CLAUDE.md`](CLAUDE.md): the project brief, roadmap, status and decision log
-- [`docs/milestones/`](docs/milestones/): one explainer per milestone (start with [`M0.md`](docs/milestones/M0.md))
+- [`docs/milestones/`](docs/milestones/): one explainer per milestone (start with [`M0.md`](docs/milestones/M0.md)). Each describes the code as of its milestone's commit (`git log --oneline` lists them; `git checkout <commit>` to follow along exactly).
 - [`docs/MacChecklist.md`](docs/MacChecklist.md): things to verify when building on macOS
 
 ## Prerequisites
@@ -123,9 +123,9 @@ It costs nothing, because the repository is public and the workflow uses a stand
 |---|---|
 | `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code) and `Renderer/` (the only place for Vulkan). |
 | `sandbox/` | The `Sandbox` executable, a test app that uses the engine the way a game would |
-| `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation |
+| `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation, asset copying |
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
-| `assets/` | Game assets (empty for now) |
-| `scripts/` | `build.cmd`, the Windows command-line build helper |
+| `assets/` | Game assets: textures (from `scripts/make-textures.ps1`), later models |
+| `scripts/` | `build.cmd` and `package.cmd` (Windows builds), `make-textures.ps1` |
 | `.github/workflows/` | The macOS CI build |
 | `docs/` | Milestone explainers and the macOS checklist |

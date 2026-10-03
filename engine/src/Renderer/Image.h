@@ -13,10 +13,12 @@ class VulkanContext;
 struct ImageSettings {
     VkExtent2D Extent {};
     VkFormat Format = VK_FORMAT_UNDEFINED;
-    // What the image will be used for: drawn into as a depth buffer, sampled as a texture (M7)...
+    // What the image will be used for: drawn into as a depth buffer, sampled as a texture...
     VkImageUsageFlags Usage = 0;
     // Which part of the image its view shows: color, or depth for a depth buffer.
     VkImageAspectFlags Aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    // How many mip levels: the full-size image plus each half-size copy (see Texture.cpp).
+    uint32_t MipLevels = 1;
 };
 
 // A 2D image in GPU memory, plus the view that rendering and shaders use to access it. The depth

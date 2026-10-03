@@ -15,6 +15,12 @@ viva_set_warnings(Sandbox)
 # and the game gets its own once it decides what to draw (M8).
 viva_compile_shaders(Sandbox)
 
+# The game's assets, copied next to the executable (see cmake/Assets.cmake). Until M8 the
+# renderer's demo scene is what loads these textures; from M8 on the game will.
+viva_copy_assets(Sandbox
+    textures/checker.png
+    textures/crate.png)
+
 # install() rules list what a player needs to run the game, like the output folder of a Unity
 # build. "cmake --install" copies them into one folder; scripts/package.cmd uses that to make
 # the per-milestone executables in dist/.

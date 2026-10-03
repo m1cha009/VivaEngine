@@ -12,6 +12,10 @@ namespace Viva {
 // folder the game is started from.
 std::string GetExecutableDirectory();
 
+// Where the build puts an asset (see cmake/Assets.cmake): assets/<relativePath> next to the
+// executable. For example "textures/crate.png".
+std::string GetAssetPath(const std::string& relativePath);
+
 // Reads a whole file into memory. The path is UTF-8. Returns std::nullopt (after logging why) if
 // it can't.
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path);

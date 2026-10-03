@@ -1,11 +1,14 @@
 #include "Renderer/Renderer.h"
 
+#include "Platform/FileSystem.h"
 #include "Renderer/FrameResources.h"
 #include "Renderer/FrameUniforms.h"
 #include "Renderer/Image.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Swapchain.h"
+#include "Renderer/Texture.h"
+#include "Renderer/TextureDescriptors.h"
 #include "Renderer/VulkanCheck.h"
 #include "Renderer/VulkanContext.h"
 #include "Renderer/VulkanHelpers.h"
@@ -51,9 +54,11 @@ void AddQuad(MeshData& mesh, const std::array<Vertex, 4>& corners)
     mesh.Indices.insert(mesh.Indices.end(), { first, first + 1, first + 2, first, first + 2, first + 3 });
 }
 
-// A cube from -0.5 to 0.5 on every axis, with a color per face. A corner belongs to three faces
-// with three colors, so it's stored three times: 24 vertices, 36 indices.
-MeshData Cube()
+// A cube from -0.5 to 0.5 on every axis, with the whole texture on each face. colorFaces gives
+// every face its own color; otherwise they're white, which shows the texture as it is. A corner
+// belongs to three faces with different colors and UVs, so it's stored three times: 24 vertices,
+// 36 indices.
+MeshData Cube(bool colorFaces)
 {
     // For each face: the direction it faces, and two directions along it (U and V) chosen so that
     // cross(U, V) = Normal. Then the corners -U-V, +U-V, +U+V, -U+V go counter-clockwise when
@@ -78,37 +83,39 @@ MeshData Cube()
 
     MeshData mesh;
     for (const Face& face : kFaces) {
+        const glm::vec3 color = colorFaces ? face.Color : glm::vec3(1.0f);
         std::array<Vertex, 4> corners;
         for (size_t i = 0; i < corners.size(); ++i) {
-            const glm::vec3 position = 0.5f * (face.Normal + kCorners[i].x * face.U + kCorners[i].y * face.V);
-            corners[i] = { position, face.Color * kShades[i] };
+            const glm::vec2 corner = kCorners[i];
+            // The corner from -1..1 along U and V becomes UV 0..1, with V flipped: the texture's
+            // top row (v = 0) goes at the +V edge.
+            corners[i] = {
+                .Position = 0.5f * (face.Normal + corner.x * face.U + corner.y * face.V),
+                .Color = color * kShades[i],
+                .UV = { (corner.x + 1.0f) / 2.0f, (1.0f - corner.y) / 2.0f },
+            };
         }
         AddQuad(mesh, corners);
     }
     return mesh;
 }
 
-// A checkerboard on the ground (y = 0): tiles x tiles squares of 1 unit, centered on the origin.
-MeshData Floor(int tiles)
+// The floor: one square of size x size units on the ground (y = 0), centered on the origin. Its
+// UVs run past 1, so the texture repeats across it: once every 2 units.
+MeshData Floor(float size)
 {
-    constexpr glm::vec3 kLight { 0.45f, 0.45f, 0.48f };
-    constexpr glm::vec3 kDark { 0.22f, 0.22f, 0.25f };
-    const float half = static_cast<float>(tiles) / 2.0f;
-
+    const float half = size / 2.0f;
+    const float repeats = size / 2.0f;
+    constexpr glm::vec3 kWhite(1.0f);
+    // Seen from above (-Z at the top), these corners go top-left, bottom-left, bottom-right,
+    // top-right: counter-clockwise, so the floor's front faces up.
     MeshData mesh;
-    for (int row = 0; row < tiles; ++row) {
-        for (int column = 0; column < tiles; ++column) {
-            const float x = static_cast<float>(column) - half;
-            const float z = static_cast<float>(row) - half;
-            const glm::vec3 color = (row + column) % 2 == 0 ? kLight : kDark;
-            // Seen from above (-Z at the top), these corners go top-left, bottom-left,
-            // bottom-right, top-right: counter-clockwise, so the floor's front faces up.
-            AddQuad(mesh, { { { { x, 0.0f, z }, color },
-                              { { x, 0.0f, z + 1.0f }, color },
-                              { { x + 1.0f, 0.0f, z + 1.0f }, color },
-                              { { x + 1.0f, 0.0f, z }, color } } });
-        }
-    }
+    AddQuad(mesh, { {
+        { .Position = { -half, 0.0f, -half }, .Color = kWhite, .UV = { 0.0f, 0.0f } },
+        { .Position = { -half, 0.0f, half }, .Color = kWhite, .UV = { 0.0f, repeats } },
+        { .Position = { half, 0.0f, half }, .Color = kWhite, .UV = { repeats, repeats } },
+        { .Position = { half, 0.0f, -half }, .Color = kWhite, .UV = { repeats, 0.0f } },
+    } });
     return mesh;
 }
 
@@ -116,7 +123,7 @@ MeshData Floor(int tiles)
 // which applies to the mesh right to left: scale it, then turn it, then move it into place, just
 // like a Unity Transform's scale, rotation and position.
 
-// The cube in the middle: hovering above the floor and turning around a tilted axis.
+// The crate in the middle: hovering above the floor and turning around a tilted axis.
 glm::mat4 SpinningCubeTransform(float seconds)
 {
     glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
@@ -124,8 +131,8 @@ glm::mat4 SpinningCubeTransform(float seconds)
     return glm::scale(model, glm::vec3(1.2f));
 }
 
-// Pillar i of `count`, standing in a ring around the middle: the same cube mesh, stretched tall.
-// The ring is turned by half a step, so no pillar stands between the starting camera and the cube.
+// Pillar i of `count`, standing in a ring around the middle: a cube mesh, stretched tall. The
+// ring is turned by half a step, so no pillar stands between the starting camera and the crate.
 glm::mat4 PillarTransform(int i, int count)
 {
     const float angle = glm::two_pi<float>() * (static_cast<float>(i) + 0.5f) / static_cast<float>(count);
@@ -136,6 +143,13 @@ glm::mat4 PillarTransform(int i, int count)
     return glm::scale(model, glm::vec3(0.6f, kHeight, 0.6f));
 }
 
+// Binds the texture the next draws sample: its descriptor set, as set 1. Set 0 (the camera)
+// stays bound.
+void BindTexture(VkCommandBuffer cmd, VkPipelineLayout layout, VkDescriptorSet textureSet)
+{
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 1, 1, &textureSet, 0, nullptr);
+}
+
 // Hands the next draw its model matrix, then draws the mesh.
 void DrawMesh(VkCommandBuffer cmd, VkPipelineLayout layout, const Mesh& mesh, const glm::mat4& model)
 {
@@ -144,6 +158,56 @@ void DrawMesh(VkCommandBuffer cmd, VkPipelineLayout layout, const Mesh& mesh, co
 }
 
 } // namespace
+
+// What the renderer draws until M8 hands that job to the game: meshes, and the textures they're
+// drawn with, each with its descriptor set (set 1).
+struct DemoScene {
+    std::unique_ptr<Mesh> CrateMesh;  // white faces: the crate texture as it is
+    std::unique_ptr<Mesh> PillarMesh; // colored faces, drawn with the white texture
+    std::unique_ptr<Mesh> FloorMesh;
+    std::unique_ptr<Texture> CrateTexture;
+    std::unique_ptr<Texture> FloorTexture;
+    std::unique_ptr<Texture> WhiteTexture; // 1x1 white: "no texture", only the vertex colors show
+    VkDescriptorSet CrateSet = VK_NULL_HANDLE;
+    VkDescriptorSet FloorSet = VK_NULL_HANDLE;
+    VkDescriptorSet WhiteSet = VK_NULL_HANDLE;
+
+    // Returns nullptr (after logging why) if a texture file can't be loaded.
+    static std::unique_ptr<DemoScene> Create(const VulkanContext& context, TextureDescriptors& textureDescriptors)
+    {
+        auto scene = std::make_unique<DemoScene>();
+        scene->CrateTexture = Texture::Load(context, GetAssetPath("textures/crate.png"));
+        scene->FloorTexture = Texture::Load(context, GetAssetPath("textures/checker.png"));
+        if (!scene->CrateTexture || !scene->FloorTexture)
+            return nullptr;
+        constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
+        scene->WhiteTexture = Texture::Create(context, 1, 1, kWhitePixel);
+
+        scene->CrateSet = textureDescriptors.Allocate(*scene->CrateTexture);
+        scene->FloorSet = textureDescriptors.Allocate(*scene->FloorTexture);
+        scene->WhiteSet = textureDescriptors.Allocate(*scene->WhiteTexture);
+
+        scene->CrateMesh = Mesh::Create(context, Cube(false));
+        scene->PillarMesh = Mesh::Create(context, Cube(true));
+        scene->FloorMesh = Mesh::Create(context, Floor(24.0f));
+        return scene;
+    }
+
+    // Records the draws: per object, the texture to use (if it changes), the model matrix, the mesh.
+    void Draw(VkCommandBuffer cmd, VkPipelineLayout layout, float seconds) const
+    {
+        BindTexture(cmd, layout, FloorSet);
+        DrawMesh(cmd, layout, *FloorMesh, glm::mat4(1.0f)); // the identity matrix: the floor as built
+
+        BindTexture(cmd, layout, WhiteSet);
+        constexpr int kPillars = 8;
+        for (int i = 0; i < kPillars; ++i)
+            DrawMesh(cmd, layout, *PillarMesh, PillarTransform(i, kPillars));
+
+        BindTexture(cmd, layout, CrateSet);
+        DrawMesh(cmd, layout, *CrateMesh, SpinningCubeTransform(seconds));
+    }
+};
 
 std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
 {
@@ -156,15 +220,20 @@ std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
 
     renderer->m_Frames = std::make_unique<FrameResources>(context.GetDevice(), context.GetGraphicsQueueFamily());
     renderer->m_FrameUniforms = FrameUniforms::Create(context);
+    renderer->m_TextureDescriptors = TextureDescriptors::Create(context.GetDevice());
     if (!renderer->RecreateSwapchain())
         return nullptr;
 
-    // The pipeline reads Vertex from vertex buffers, gets the camera through descriptor set 0 and
-    // the model matrix as a push constant, tests depth and skips back faces.
-    const VkDescriptorSetLayout setLayouts[] = { renderer->m_FrameUniforms->GetLayout() };
-    renderer->m_VertexColorPipeline = Pipeline::Create(context.GetDevice(), {
-        .VertexShader = "VertexColor.vert",
-        .FragmentShader = "VertexColor.frag",
+    // The pipeline reads Vertex from vertex buffers, gets the camera through descriptor set 0, a
+    // texture through set 1 and the model matrix as a push constant, tests depth and skips back
+    // faces.
+    const VkDescriptorSetLayout setLayouts[] = {
+        renderer->m_FrameUniforms->GetLayout(),      // set 0
+        renderer->m_TextureDescriptors->GetLayout(), // set 1
+    };
+    renderer->m_UnlitPipeline = Pipeline::Create(context.GetDevice(), {
+        .VertexShader = "Unlit.vert",
+        .FragmentShader = "Unlit.frag",
         .VertexBindings = kVertexBindings,
         .VertexAttributes = kVertexAttributes,
         .DescriptorSetLayouts = setLayouts,
@@ -173,11 +242,12 @@ std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
         .DepthFormat = VulkanContext::kDepthFormat,
         .CullMode = VK_CULL_MODE_BACK_BIT,
     });
-    if (!renderer->m_VertexColorPipeline)
+    if (!renderer->m_UnlitPipeline)
         return nullptr;
 
-    renderer->m_CubeMesh = Mesh::Create(context, Cube());
-    renderer->m_FloorMesh = Mesh::Create(context, Floor(24));
+    renderer->m_Scene = DemoScene::Create(context, *renderer->m_TextureDescriptors);
+    if (!renderer->m_Scene)
+        return nullptr;
     context.LogMemoryUsage();
     return renderer;
 }
@@ -427,20 +497,14 @@ void Renderer::DrawFrame(const Camera& camera)
 
 void Renderer::RecordDraws(VkCommandBuffer cmd)
 {
-    const VkPipelineLayout layout = m_VertexColorPipeline->GetLayout();
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VertexColorPipeline->GetHandle());
+    const VkPipelineLayout layout = m_UnlitPipeline->GetLayout();
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_UnlitPipeline->GetHandle());
 
     // Set 0: this frame's camera. Bound once, it stays bound for every draw that follows.
     const VkDescriptorSet cameraSet = m_FrameUniforms->GetSet(m_FrameIndex);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &cameraSet, 0, nullptr);
 
-    // The demo scene. Every draw pushes its own model matrix; the pillars and the spinning cube
-    // all draw the same cube mesh, just placed differently.
-    DrawMesh(cmd, layout, *m_FloorMesh, glm::mat4(1.0f)); // the identity matrix: the floor as built
-    constexpr int kPillars = 8;
-    for (int i = 0; i < kPillars; ++i)
-        DrawMesh(cmd, layout, *m_CubeMesh, PillarTransform(i, kPillars));
-    DrawMesh(cmd, layout, *m_CubeMesh, SpinningCubeTransform(static_cast<float>(Time::SinceStart())));
+    m_Scene->Draw(cmd, layout, static_cast<float>(Time::SinceStart()));
 }
 
 } // namespace Viva

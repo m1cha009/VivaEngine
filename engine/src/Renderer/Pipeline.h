@@ -9,12 +9,12 @@
 namespace Viva {
 
 // What to build a pipeline from. Fill it with designated initializers, like ApplicationSettings:
-//     Pipeline::Create(device, { .VertexShader = "VertexColor.vert", .FragmentShader = "VertexColor.frag",
+//     Pipeline::Create(device, { .VertexShader = "Unlit.vert", .FragmentShader = "Unlit.frag",
 //                                .ColorFormat = format });
 // Fields left out keep their defaults (the fields must be named in the order they're declared).
 struct PipelineSettings {
-    // Shader names as in the shaders/ folder. "VertexColor.vert" loads the compiled
-    // shaders/VertexColor.vert.spv from next to the executable.
+    // Shader names as in the shaders/ folder. "Unlit.vert" loads the compiled
+    // shaders/Unlit.vert.spv from next to the executable.
     std::string VertexShader;
     std::string FragmentShader;
     // How the vertex shader's inputs are read from vertex buffers: kVertexBindings and

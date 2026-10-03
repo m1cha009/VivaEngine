@@ -27,9 +27,9 @@
 | Shaders | GLSL in `shaders/`, compiled to SPIR-V at build time with `glslc` (CMake custom command). `.spv` files are copied next to the executable. |
 | Math | GLM (FetchContent) with `GLM_FORCE_DEPTH_ZERO_TO_ONE` and `GLM_FORCE_RADIANS` |
 | GPU memory | Vulkan Memory Allocator (VMA) 3.4.0 (FetchContent, header-only, PRIVATE to the engine), since M5 |
+| Image decoding | stb_image (FetchContent, pinned commit archive, PNG/JPEG only, PRIVATE to the engine), since M7 |
 
 **Approved for later milestones** (add each only when its milestone arrives):
-- stb_image
 - Dear ImGui (SDL3 + Vulkan backends)
 - cgltf
 
@@ -238,9 +238,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M7 (textures) is next. Done: M0–M6 (2026-10-03).
-- **Verified on Windows:** M0–M6, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
-- **CI (macOS):** green through M5. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M8 (renderer abstraction) is next. Done: M0–M7 (2026-10-03).
+- **Verified on Windows:** M0–M7, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
+- **CI (macOS):** green through M6. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -390,3 +390,32 @@ Append one line per decision: date, decision, reason.
     - Fold the per-frame uniform buffer and set into `FrameData`.
     - Make the deferred-deletion queue a per-frame vector of `unique_ptr`s, not a `std::function` deque.
     - Upload batches with a persistent pool and fence.
+- 2026-10-03: M7 design:
+  - stb_image is pinned to nothings/stb commit `2c980bb` (v2.30) by SHA-256, as an INTERFACE target `stb::image`.
+    - `Core/ImageFile` decodes from memory after `ReadBinaryFile` (`STBI_NO_STDIO`, PNG/JPEG only, `STBI_ASSERT` → `VIVA_ASSERT`) into RGBA8.
+  - Assets:
+    - `cmake/Assets.cmake`'s `viva_copy_assets(target files...)` copies them with `copy_if_different` to `bin/assets/` and installs them. The Sandbox owns them.
+    - `GetAssetPath(relative)` sits next to `GetExecutableDirectory`.
+    - The textures are procedural, from `scripts/make-textures.ps1` (Windows/System.Drawing), with the PNGs committed.
+  - `Texture`:
+    - an `Image` with a full mip chain (`std::bit_width`) in `R8G8B8A8_SRGB`;
+    - uploaded through staging, with mips blitted on the GPU: each level goes DST→SRC, then one final barrier moves the whole image to SHADER_READ_ONLY;
+    - its own sampler: trilinear, REPEAT, anisotropy at the device maximum when `samplerAnisotropy` is available. The feature is optional, and `VulkanContext::GetMaxSamplerAnisotropy` returns 0 when it's absent.
+  - Descriptor set 1 is one combined image sampler. `TextureDescriptors` owns its layout and a fixed pool of 16, and `Allocate(texture)` writes it.
+  - `VulkanHelpers` gained descriptor helpers (layout, pool, allocate, write buffer/image), which FrameUniforms uses too.
+  - `Vertex` has UV at location 2. The `Unlit` shaders (texture × vertex color) replace the VertexColor ones, and a 1×1 white texture stands for "no texture".
+  - The demo content lives in a `DemoScene` struct defined in Renderer.cpp (forward-declared in Renderer.h, which stays free of vulkan.h). M8 removes it.
+  - README: each milestone doc describes its own commit.
+- 2026-10-03: M7 `/simplify` pass:
+  - Descriptor writes go through `WriteUniformBufferDescriptor` and `WriteImageDescriptor`.
+  - Mip generation has a single path to SHADER_READ_ONLY.
+  - `Image` no longer stores extent and mip count.
+  - stb gets a namespaced alias.
+  - A comment notes that the spec guarantees linear blits for R8G8B8A8.
+  - Deferred to M8:
+    - one descriptor allocator that grows and can free, shared by FrameUniforms, textures and materials;
+    - the renderer owns samplers, cached by settings once glTF brings per-texture samplers;
+    - loading APIs resolve asset names to paths in one place.
+  - Deferred to M11:
+    - `DecodeImage(span)` split from `LoadImageFile`, for images embedded in .glb files;
+    - a color-space parameter (sRGB vs UNORM) when the first data texture arrives.

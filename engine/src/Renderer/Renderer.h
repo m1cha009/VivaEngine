@@ -12,12 +12,13 @@ struct VkCommandBuffer_T;
 namespace Viva {
 
 struct Camera;
+struct DemoScene;
 class FrameResources;
 class FrameUniforms;
 class Image;
-class Mesh;
 class Pipeline;
 class Swapchain;
+class TextureDescriptors;
 class VulkanContext;
 
 // The engine's renderer, and the only renderer class the rest of the engine talks to. Its header
@@ -42,7 +43,7 @@ public:
 private:
     bool RecreateSwapchain();
     // Records this frame's draw calls, between vkCmdBeginRendering and vkCmdEndRendering. The
-    // parameter is a VkCommandBuffer. M5 to M7 add their draws here; M8 replaces it with the
+    // parameter is a VkCommandBuffer. Until M7 it draws the demo scene; M8 replaces it with the
     // game's own list of draws.
     void RecordDraws(VkCommandBuffer_T* cmd);
 
@@ -56,12 +57,13 @@ private:
     std::unique_ptr<VulkanContext> m_Context;
     std::unique_ptr<FrameResources> m_Frames;
     std::unique_ptr<FrameUniforms> m_FrameUniforms;
+    std::unique_ptr<TextureDescriptors> m_TextureDescriptors;
     std::unique_ptr<Swapchain> m_Swapchain;
     std::unique_ptr<Image> m_DepthImage; // the swapchain images' size, so it's rebuilt with them
-    std::unique_ptr<Pipeline> m_VertexColorPipeline;
-    // The demo scene's meshes (M8 moves "what to draw" into the game).
-    std::unique_ptr<Mesh> m_CubeMesh;
-    std::unique_ptr<Mesh> m_FloorMesh;
+    std::unique_ptr<Pipeline> m_UnlitPipeline;
+    // The meshes and textures being drawn, defined in Renderer.cpp. (M8 moves "what to draw" into
+    // the game.)
+    std::unique_ptr<DemoScene> m_Scene;
 
     Extent m_SwapchainWindowSize;    // the window's pixel size when the swapchain was built
     bool m_SwapchainOutdated = false; // set when Vulkan reports the swapchain no longer fits

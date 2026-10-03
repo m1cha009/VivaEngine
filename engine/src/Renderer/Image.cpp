@@ -15,7 +15,7 @@ std::unique_ptr<Image> Image::Create(const VulkanContext& context, const ImageSe
         .imageType = VK_IMAGE_TYPE_2D,
         .format = settings.Format,
         .extent = { settings.Extent.width, settings.Extent.height, 1 },
-        .mipLevels = 1,
+        .mipLevels = settings.MipLevels,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL, // the GPU's own layout: fastest, but not readable as rows

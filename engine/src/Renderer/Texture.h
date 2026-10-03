@@ -1,0 +1,44 @@
+#pragma once
+
+#include "Renderer/Image.h"
+
+#include <vulkan/vulkan.h>
+
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <string>
+
+namespace Viva {
+
+class VulkanContext;
+
+// A texture: an image in GPU memory with a full chain of mipmaps, plus the sampler that says how
+// shaders read it (filtering, repeating). Like a Unity Texture2D together with its import
+// settings.
+class Texture {
+public:
+    // Loads a PNG or JPEG file. Returns nullptr (after logging why) if it can't.
+    static std::unique_ptr<Texture> Load(const VulkanContext& context, const std::string& path);
+
+    // A texture from pixels in memory: width x height pixels of 4 bytes (red, green, blue,
+    // alpha), row after row from the top-left corner.
+    static std::unique_ptr<Texture> Create(const VulkanContext& context, uint32_t width, uint32_t height,
+                                           std::span<const uint8_t> pixels);
+
+    explicit Texture(VkDevice device); // creates nothing: use Load() or Create()
+    ~Texture();
+
+    Texture(const Texture&) = delete;
+    Texture& operator=(const Texture&) = delete;
+
+    VkImageView GetView() const { return m_Image->GetView(); }
+    VkSampler GetSampler() const { return m_Sampler; }
+
+private:
+    VkDevice m_Device = VK_NULL_HANDLE;
+    std::unique_ptr<Image> m_Image;
+    VkSampler m_Sampler = VK_NULL_HANDLE;
+};
+
+} // namespace Viva

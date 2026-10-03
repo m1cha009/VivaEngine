@@ -55,11 +55,84 @@ VkImageView CreateImageView(VkDevice device, VkImage image, VkFormat format, VkI
         .image = image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = format,
-        .subresourceRange = { .aspectMask = aspect, .levelCount = 1, .layerCount = 1 },
+        .subresourceRange = {
+            .aspectMask = aspect,
+            .levelCount = VK_REMAINING_MIP_LEVELS, // every mip level, so sampling can pick any
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
     };
     VkImageView view = VK_NULL_HANDLE;
     VK_CHECK(vkCreateImageView(device, &info, nullptr, &view));
     return view;
+}
+
+VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings)
+{
+    const VkDescriptorSetLayoutCreateInfo info {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(bindings.size()),
+        .pBindings = bindings.data(),
+    };
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateDescriptorSetLayout(device, &info, nullptr, &layout));
+    return layout;
+}
+
+VkDescriptorPool CreateDescriptorPool(VkDevice device, uint32_t maxSets, std::span<const VkDescriptorPoolSize> sizes)
+{
+    const VkDescriptorPoolCreateInfo info {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = maxSets,
+        .poolSizeCount = static_cast<uint32_t>(sizes.size()),
+        .pPoolSizes = sizes.data(),
+    };
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateDescriptorPool(device, &info, nullptr, &pool));
+    return pool;
+}
+
+VkDescriptorSet AllocateDescriptorSet(VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout layout)
+{
+    const VkDescriptorSetAllocateInfo info {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &layout,
+    };
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    VK_CHECK(vkAllocateDescriptorSets(device, &info, &set));
+    return set;
+}
+
+void WriteUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
+                                  VkDeviceSize range)
+{
+    const VkDescriptorBufferInfo bufferInfo { .buffer = buffer, .offset = 0, .range = range };
+    const VkWriteDescriptorSet write {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = set,
+        .dstBinding = binding,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo,
+    };
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+}
+
+void WriteImageDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkImageView view, VkSampler sampler,
+                          VkImageLayout layout)
+{
+    // A "combined image sampler": the view and the sampler travel in one descriptor.
+    const VkDescriptorImageInfo imageInfo { .sampler = sampler, .imageView = view, .imageLayout = layout };
+    const VkWriteDescriptorSet write {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = set,
+        .dstBinding = binding,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo,
+    };
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 }
 
 void TransitionImage(VkCommandBuffer cmd, const ImageTransition& transition)
@@ -77,7 +150,8 @@ void TransitionImage(VkCommandBuffer cmd, const ImageTransition& transition)
         .image = transition.Image,
         .subresourceRange = {
             .aspectMask = transition.Aspect,
-            .levelCount = VK_REMAINING_MIP_LEVELS, // every mip level, from 0
+            .baseMipLevel = transition.BaseMipLevel,
+            .levelCount = transition.MipLevelCount,
             .layerCount = VK_REMAINING_ARRAY_LAYERS, // every layer, from 0
         },
     };

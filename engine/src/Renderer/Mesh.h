@@ -2,6 +2,7 @@
 
 #include "Renderer/Buffer.h"
 
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <vulkan/vulkan.h>
 
@@ -15,10 +16,15 @@ namespace Viva {
 class VulkanContext;
 
 // One vertex, laid out exactly as a vertex buffer stores it and the vertex shader reads it
-// (shaders/VertexColor.vert: "layout(location = 0) in vec3 inPosition", location 1 the color).
+// (shaders/Unlit.vert: "layout(location = 0) in vec3 inPosition", location 1 the color,
+// location 2 the texture coordinates).
 struct Vertex {
     glm::vec3 Position;
+    // Multiplied with the texture's color: white shows the texture as it is.
     glm::vec3 Color;
+    // Texture coordinates ("UV"): which point of the texture this vertex shows. (0, 0) is the
+    // texture's top-left corner and (1, 1) its bottom-right; values past 1 repeat it.
+    glm::vec2 UV;
 };
 
 // How a pipeline reads Vertex out of a vertex buffer (both go into PipelineSettings).
@@ -27,10 +33,11 @@ inline constexpr VkVertexInputBindingDescription kVertexBindings[] = {
     { .binding = 0, .stride = sizeof(Vertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX },
 };
 // The attributes: for each shader input (its location), which binding it comes from, its type
-// (three 32-bit floats) and where it sits inside a Vertex.
+// (three or two 32-bit floats) and where it sits inside a Vertex.
 inline constexpr VkVertexInputAttributeDescription kVertexAttributes[] = {
     { .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, Position) },
     { .location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, Color) },
+    { .location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(Vertex, UV) },
 };
 
 // A mesh on the CPU side: its vertices, and its triangles as indices into Vertices, three per

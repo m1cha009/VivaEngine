@@ -133,7 +133,8 @@ struct DeviceInfo {
     VkPhysicalDeviceProperties Properties {};
     uint32_t GraphicsQueueFamily = 0;
     uint32_t PresentQueueFamily = 0;
-    std::string_view Problem; // why the engine can't use it; empty if it can
+    bool SamplerAnisotropy = false; // optional: sharper textures at grazing angles (M7)
+    std::string_view Problem;       // why the engine can't use it; empty if it can
 };
 
 // Checks everything the engine needs from a GPU, finding its queue families on the way.
@@ -192,6 +193,7 @@ DeviceInfo CheckDevice(VkPhysicalDevice device, VkSurfaceKHR surface)
     vkGetPhysicalDeviceFeatures2(device, &features);
     if (!features13.dynamicRendering || !features13.synchronization2)
         return fail("no dynamic rendering or synchronization2");
+    info.SamplerAnisotropy = features.features.samplerAnisotropy == VK_TRUE;
 
     // The depth buffer's format (M6). Every desktop GPU supports it, but Vulkan doesn't promise
     // it, so check. OPTIMAL tiling: the GPU's own image layout, which is what we create.
@@ -394,6 +396,8 @@ bool VulkanContext::PickPhysicalDevice()
     m_PhysicalDevice = best->Device;
     m_GraphicsQueueFamily = best->GraphicsQueueFamily;
     m_PresentQueueFamily = best->PresentQueueFamily;
+    // Anisotropic filtering, if the GPU has it, at the strongest level it supports (usually 16).
+    m_MaxSamplerAnisotropy = best->SamplerAnisotropy ? best->Properties.limits.maxSamplerAnisotropy : 0.0f;
 
     // The driver's name and version come from the Vulkan 1.2 properties, another pNext chain.
     VkPhysicalDeviceVulkan12Properties properties12 { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES };
@@ -436,9 +440,11 @@ bool VulkanContext::CreateDevice()
         .synchronization2 = VK_TRUE,
         .dynamicRendering = VK_TRUE,
     };
+    // samplerAnisotropy is an optional Vulkan 1.0 feature: turned on only if the GPU has it.
     const VkPhysicalDeviceFeatures2 features {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .pNext = &features13,
+        .features = { .samplerAnisotropy = m_MaxSamplerAnisotropy > 0.0f ? VK_TRUE : VK_FALSE },
     };
 
     const VkDeviceCreateInfo createInfo {

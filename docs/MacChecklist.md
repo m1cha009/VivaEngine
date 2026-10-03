@@ -120,3 +120,14 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       turning speed on a Retina screen, where SDL reports deltas in points.
 - [ ] Resize and full screen rebuild the depth buffer at the new pixel size, with no validation
       output.
+
+## M7: Textures
+
+- [ ] **(CI)** The textures load from `build/macos-*/bin/assets/textures/` (copied by the build),
+      and the mip chains generate with validation silent.
+- [ ] The crate and the checker floor look the same as on Windows: correct orientation, no color
+      shift (sRGB), smooth distant floor.
+- [ ] Anisotropic filtering is on: the Debug build accepts the GPU with `samplerAnisotropy`
+      (MoltenVK reports it), and the far floor stays fairly sharp.
+- [ ] `scripts/make-textures.ps1` is Windows-only. Nothing on the Mac needs it, since the PNGs are
+      committed.

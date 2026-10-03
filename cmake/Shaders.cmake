@@ -1,8 +1,8 @@
 # viva_compile_shaders(<target> <file>...)
 #
 # Compiles GLSL shaders to SPIR-V with glslc whenever <target> is built, and writes each
-# result next to the executables as build/<preset>/bin/shaders/<file>.spv (VertexColor.vert
-# becomes VertexColor.vert.spv). glslc picks the shader stage from the file extension:
+# result next to the executables as build/<preset>/bin/shaders/<file>.spv (Unlit.vert
+# becomes Unlit.vert.spv). glslc picks the shader stage from the file extension:
 # .vert, .frag, .comp, ...
 #
 # Why compile at build time: Vulkan doesn't accept GLSL text at all, only SPIR-V, a compact
@@ -10,7 +10,7 @@
 # same way Unity compiles shaders when it imports them, not when the game runs.
 #
 # Call it once per target, listing all of that target's shaders. Example (engine/CMakeLists.txt):
-#   viva_compile_shaders(VivaEngine ${PROJECT_SOURCE_DIR}/shaders/VertexColor.vert ...)
+#   viva_compile_shaders(VivaEngine ${PROJECT_SOURCE_DIR}/shaders/Unlit.vert ...)
 function(viva_compile_shaders target)
     # Assumes a single-config generator like Ninja (all our presets use it), where the
     # executables sit directly in CMAKE_RUNTIME_OUTPUT_DIRECTORY.

@@ -14,7 +14,7 @@ namespace Viva {
 class VulkanContext;
 
 // The data every draw in a frame shares, laid out exactly like "uniform Camera" in
-// shaders/VertexColor.vert. GLSL lays out uniform blocks by the "std140" rules; a mat4 there is
+// shaders/Unlit.vert. GLSL lays out uniform blocks by the "std140" rules; a mat4 there is
 // 64 bytes, column after column, the same as glm::mat4, so this struct can be copied as is.
 struct CameraUniforms {
     glm::mat4 View;

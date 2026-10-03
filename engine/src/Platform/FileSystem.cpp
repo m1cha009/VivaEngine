@@ -17,6 +17,12 @@ std::string GetExecutableDirectory()
     return basePath ? basePath : "";
 }
 
+std::string GetAssetPath(const std::string& relativePath)
+{
+    // "/" works as a separator on Windows too.
+    return GetExecutableDirectory() + "assets/" + relativePath;
+}
+
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path)
 {
     // SDL_LoadFile reads the whole file into memory that SDL allocates. It takes a UTF-8 path on

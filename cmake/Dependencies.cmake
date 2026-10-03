@@ -55,7 +55,24 @@ FetchContent_Declare(VulkanMemoryAllocator
     URL_HASH SHA256=822aa850c6ce77346ae96a8a1d351d52e77e85929f35363849a0a4e638e0a2a1
     SYSTEM)
 
-FetchContent_MakeAvailable(SDL3 glm VulkanMemoryAllocator)
+# --- stb_image: PNG and JPEG decoding --------------------------------------------------------
+# Part of Sean Barrett's single-header "stb" libraries (public domain / MIT). The repository has
+# no releases, so a specific commit's source archive is pinned instead. It has no CMakeLists.txt
+# either: MakeAvailable just unpacks it, and the stb_image target below exposes the header. Its
+# implementation is compiled once, in engine/src/Core/ImageFile.cpp.
+FetchContent_Declare(stb
+    URL https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz
+    URL_HASH SHA256=9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515)
+
+FetchContent_MakeAvailable(SDL3 glm VulkanMemoryAllocator stb)
+
+# An INTERFACE library is a target with no code of its own, only settings for whoever links it:
+# here, the folder with stb_image.h, as a SYSTEM include so its warnings stay hidden. The
+# namespaced alias matches the other dependencies, and a misspelled "stb::" name fails when
+# CMake configures instead of when the linker runs.
+add_library(stb_image INTERFACE)
+add_library(stb::image ALIAS stb_image)
+target_include_directories(stb_image SYSTEM INTERFACE ${stb_SOURCE_DIR})
 
 # GLM's settings must be identical everywhere GLM is used, so they're attached to GLM's own
 # target: anything that links glm::glm gets them.

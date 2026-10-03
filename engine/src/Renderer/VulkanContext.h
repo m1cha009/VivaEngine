@@ -49,6 +49,8 @@ public:
     uint32_t GetPresentQueueFamily() const { return m_PresentQueueFamily; }
     VkQueue GetPresentQueue() const { return m_PresentQueue; }
     VmaAllocator GetAllocator() const { return m_Allocator; }
+    // The strongest anisotropic filtering samplers may use, or 0 if the GPU has none.
+    float GetMaxSamplerAnisotropy() const { return m_MaxSamplerAnisotropy; }
 
     // Logs how much GPU memory VMA has allocated, and how many buffers share it (Debug builds).
     void LogMemoryUsage() const;
@@ -76,6 +78,7 @@ private:
     uint32_t m_PresentQueueFamily = 0;
     VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
     VkQueue m_PresentQueue = VK_NULL_HANDLE;
+    float m_MaxSamplerAnisotropy = 0.0f;
     VmaAllocator m_Allocator = VK_NULL_HANDLE;
 };
 
