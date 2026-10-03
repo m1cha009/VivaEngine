@@ -3,6 +3,7 @@
 #include "Platform/InputEvents.h"
 #include "Platform/SDLVersion.h"
 #include "Platform/Window.h"
+#include "Renderer/Renderer.h"
 #include "Renderer/VulkanVersion.h"
 #include "Viva/Log.h"
 #include "Viva/Time.h"
@@ -29,8 +30,8 @@ Application::Application(ApplicationSettings settings)
 {
 }
 
-// Defined here, not in the header: destroying the unique_ptr<Window> needs Window's full
-// definition, and only this file includes Platform/Window.h.
+// Defined here, not in the header: destroying the unique_ptrs needs the full definitions of
+// Window and Renderer, which only this file includes.
 Application::~Application() = default;
 
 int Application::Run()
@@ -40,6 +41,10 @@ int Application::Run()
 
     m_Window = Window::Create(m_Settings.Title, m_Settings.Width, m_Settings.Height);
     if (!m_Window)
+        return EXIT_FAILURE;
+
+    m_Renderer = Renderer::Create(*m_Window);
+    if (!m_Renderer)
         return EXIT_FAILURE;
 
     OnStart();
@@ -84,7 +89,10 @@ int Application::Run()
     }
 
     OnShutdown();
-    m_Window.reset(); // closes the window and shuts SDL down (Window's destructor)
+    // Tear down in reverse order of creation: the renderer (all of Vulkan), then the window and
+    // SDL. Each reset() runs the object's destructor right here.
+    m_Renderer.reset();
+    m_Window.reset();
     return EXIT_SUCCESS;
 }
 

@@ -11,7 +11,10 @@ function(viva_set_warnings target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra)
+        # -Wno-missing-field-initializers: our Vulkan code fills structs with C++20 designated
+        # initializers ({ .sType = ..., .flags = ... }) and deliberately leaves the other fields
+        # zero. Clang warns about every omitted field; GCC and MSVC don't.
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
     endif()
     set_target_properties(${target} PROPERTIES COMPILE_WARNING_AS_ERROR ON)
 endfunction()

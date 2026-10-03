@@ -14,6 +14,9 @@ add_library(VivaEngine STATIC
     src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp
+    src/Renderer/Renderer.cpp
+    src/Renderer/VulkanCheck.cpp
+    src/Renderer/VulkanContext.cpp
     src/Renderer/VulkanVersion.cpp)
 
 # include/ is the public API that games see. src/ is private to the engine.

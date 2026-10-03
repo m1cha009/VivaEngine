@@ -7,6 +7,9 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_video.h>
+// SDL's Vulkan helpers. Without vulkan.h included, this header defines VkInstance and VkSurfaceKHR
+// itself, as pointers to the same structs Window.h declares.
+#include <SDL3/SDL_vulkan.h>
 
 namespace Viva {
 
@@ -80,6 +83,28 @@ Extent Window::GetPixelSize() const
 void Window::SetTitle(const std::string& title)
 {
     SDL_SetWindowTitle(m_Window, title.c_str());
+}
+
+std::vector<const char*> Window::GetRequiredVulkanExtensions()
+{
+    Uint32 count = 0;
+    const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count);
+    if (!names) {
+        Log::Error("SDL_Vulkan_GetInstanceExtensions failed: {}", SDL_GetError());
+        return {};
+    }
+    // A vector built from a range: the "begin" pointer and one past the last element.
+    return std::vector<const char*>(names, names + count);
+}
+
+VkSurfaceKHR_T* Window::CreateVulkanSurface(VkInstance_T* instance) const
+{
+    VkSurfaceKHR surface = nullptr;
+    if (!SDL_Vulkan_CreateSurface(m_Window, instance, nullptr, &surface)) {
+        Log::Error("SDL_Vulkan_CreateSurface failed: {}", SDL_GetError());
+        return nullptr;
+    }
+    return surface;
 }
 
 void Window::HandleEvent(const SDL_Event& event)

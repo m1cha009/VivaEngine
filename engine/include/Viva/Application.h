@@ -6,8 +6,9 @@
 
 namespace Viva {
 
-// Declared, not defined: the game never sees Window's definition (it lives in src/Platform/).
-// A pointer or unique_ptr to a type only needs this declaration.
+// Declared, not defined: the game never sees these classes' definitions (they live in
+// src/Platform/ and src/Renderer/). A pointer or unique_ptr to a type only needs a declaration.
+class Renderer;
 class Window;
 
 // Settings for the application's window. C++20 lets you fill in just the fields you need:
@@ -64,6 +65,9 @@ protected:
 private:
     ApplicationSettings m_Settings;
     std::unique_ptr<Window> m_Window;
+    // Declared after m_Window, so it's destroyed first: members are destroyed in reverse order,
+    // and the renderer's Vulkan surface belongs to the window.
+    std::unique_ptr<Renderer> m_Renderer;
     bool m_QuitRequested = false;
 };
 

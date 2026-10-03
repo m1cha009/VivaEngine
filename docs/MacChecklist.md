@@ -48,3 +48,18 @@ real Mac: CLion, your own SDK install, a real GPU and window.
 - [ ] Minimize (Cmd+M): CPU drops to about 0%, and restoring continues normally. Cmd+Q and the red
       close button both shut down cleanly (exit code 0).
 - [ ] Dragging the window edge logs `Window resized to …` in pixels.
+
+## M2: Vulkan instance, validation, device
+
+- [ ] The GPU list shows the Mac's GPU (for example `Apple M1 Pro`) through MoltenVK or
+      KosmicKrisp, and the `Using …` line names the driver. The portability path makes this
+      possible: the instance enables `VK_KHR_portability_enumeration` with
+      `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR`.
+- [ ] `VK_KHR_portability_subset` is enabled automatically when the device lists it. There
+      should be no validation error about it at device creation.
+- [ ] "Vulkan validation layer enabled" appears in Debug, and the layer reports nothing during
+      startup, resize, minimize (Cmd+M) and shutdown.
+- [ ] With both drivers installed by the SDK, note which one the loader picks. KosmicKrisp needs
+      macOS 26 or later; MoltenVK works on older versions. To force one, see the LunarG
+      macOS guide (`VK_DRIVER_FILES`).
+- [ ] Check for `[Vulkan loader]` messages, and whether any of them should stay Info.

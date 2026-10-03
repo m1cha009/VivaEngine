@@ -4,10 +4,18 @@
 #include <memory>
 #include <string>
 
+#include <vector>
+
 // SDL's types, declared here without including SDL's headers. This header is included by Core
-// code (and later by Renderer code), which must not see SDL, and declarations are all it needs.
+// and Renderer code, which must not see SDL, and declarations are all it needs.
 struct SDL_Window;
 union SDL_Event;
+
+// Vulkan's handle types, declared the same way so Platform code never needs vulkan.h. On 64-bit
+// systems vulkan.h defines VkInstance as "VkInstance_T*" and VkSurfaceKHR as "VkSurfaceKHR_T*",
+// so these are exactly the types the renderer passes in.
+struct VkInstance_T;
+struct VkSurfaceKHR_T;
 
 namespace Viva {
 
@@ -45,6 +53,14 @@ public:
     Extent GetPixelSize() const;
 
     void SetTitle(const std::string& title);
+
+    // The Vulkan instance extensions this OS needs for window surfaces, as SDL reports them
+    // (VK_KHR_surface plus VK_KHR_win32_surface on Windows, VK_EXT_metal_surface on macOS).
+    static std::vector<const char*> GetRequiredVulkanExtensions();
+
+    // Creates the Vulkan surface for this window, or returns null after logging why. The caller
+    // owns it and destroys it with vkDestroySurfaceKHR.
+    VkSurfaceKHR_T* CreateVulkanSurface(VkInstance_T* instance) const;
 
 private:
     void HandleEvent(const SDL_Event& event);

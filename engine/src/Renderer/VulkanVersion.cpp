@@ -4,15 +4,10 @@
 
 namespace Viva {
 
-namespace {
-
-// Vulkan packs a version into one uint32_t (variant, major, minor, patch bit fields).
 Version FromVulkanVersion(uint32_t version)
 {
     return { VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version), VK_API_VERSION_PATCH(version) };
 }
-
-} // namespace
 
 Version GetVulkanHeaderVersion()
 {
@@ -25,8 +20,8 @@ Version GetVulkanLoaderVersion()
 {
     // A runtime question answered by the Vulkan loader. On Windows that's vulkan-1.dll, which
     // normally comes with the GPU driver. On macOS it's libvulkan.1.dylib from the SDK. The
-    // result is the newest Vulkan version the loader understands. What the GPU itself supports
-    // is a per-device question we'll ask in M2.
+    // result is the newest Vulkan version the loader understands; what each GPU supports is
+    // asked separately (VulkanContext logs it).
     uint32_t version = 0;
     if (vkEnumerateInstanceVersion(&version) != VK_SUCCESS)
         return { 1, 0, 0 }; // Only fails when out of memory. 1.0 is the safe assumption.

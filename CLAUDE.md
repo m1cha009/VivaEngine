@@ -238,8 +238,8 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M2 (Vulkan instance, validation, device) is next. Done: M0 and M1 (2026-10-03).
-- **Verified on Windows:** M0 and M1, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. M1's window was driven by an automated script (keys, mouse, minimize, resize, close). Not yet verified in CLion.
+- **Current milestone:** M3 (swapchain and clear screen) is next. Done: M0, M1, M2 (2026-10-03).
+- **Verified on Windows:** M0, M1 and M2, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script (keys, mouse, minimize, resize, close). In M2, validation was silent through all of it. Not yet verified in CLion.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -292,3 +292,18 @@ Append one line per decision: date, decision, reason.
   - `Time::DeltaTime()` returns the fixed step inside `OnFixedUpdate` (as in Unity), and `SetFixedDeltaTime` asserts a positive step.
   - CI's run steps get a 2-minute timeout.
   - Skipped: a 1 ms sleep until M3's vsync (documented as a limitation), and `Extent` → `glm::uvec2`.
+- 2026-10-03: M2 design:
+  - `Renderer` (no `vulkan.h` in its header) is what `Application` owns. `VulkanContext` holds the instance, messenger, surface, device and queues, built by a factory and torn down in reverse order by its destructor.
+  - `Window.h` declares `VkInstance_T`/`VkSurfaceKHR_T`, so surface creation needs no `vulkan.h` in `Platform/` and no SDL in `Renderer/`.
+  - GPUs are picked by type (discrete > integrated > virtual) among those with Vulkan 1.3, swapchain, dynamicRendering + synchronization2, and graphics + present queues; each rejection is logged.
+  - The debug messenger subscribes to WARNING|ERROR. Loader messages ("Loader Message") at Warning are logged as Info with a `[Vulkan loader]` prefix: on this PC, Overwolf's implicit layers (Vulkan 1.2) warn on every run.
+- 2026-10-03: Vulkan structs use C++20 designated initializers. Clang's `-Wmissing-designated-field-initializers` (part of `-Wextra`) fires on every omitted field, which was verified with CLion's clang-tidy (LLVM 23), so non-MSVC builds add `-Wno-missing-field-initializers`.
+- 2026-10-03: Test harness: test windows are started with `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0`, so they don't take keyboard focus from Michail while he works. Input is injected with PostMessage, which doesn't need focus.
+- 2026-10-03: M2 `/simplify` pass:
+  - `VK_CHECK` is fatal in every build (`[[noreturn]]`). The brief only requires that in Debug, but carrying on in Release just crashes later or repeats the error every frame.
+  - `VkResultName()` keeps `vk_enum_string_helper.h` in one file.
+  - `VulkanContext::kApiVersion` is the single Vulkan version, which VMA and ImGui must also get.
+  - GPU selection is split into `CheckDevice()` and `PickPhysicalDevice()`.
+  - Validation is selected by a `constexpr bool` instead of `#if`; with `#if`, Clang's Release build failed on an unused function.
+  - The portability subset uses the SDK's `VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME` (from `vulkan_beta.h`).
+  - CI treats "No suitable GPU found" on the runner as a warning, and checks asserts by log text.

@@ -70,6 +70,14 @@ jobs:
           rm -rf vulkansdk.zip "${app}"
           glslc --version
 
+      - name: Show Vulkan devices
+        # For the record, not a pass/fail check: what the runner's virtual Mac offers to Vulkan
+        # (which driver and GPU, and which Vulkan version). It also becomes a notice.
+        continue-on-error: true
+        run: |
+          vulkaninfo --summary 2>&1 | tee vulkaninfo.txt
+          echo "::notice title=vulkaninfo::$(grep -E 'deviceName|deviceType|apiVersion|driverName' vulkaninfo.txt | tr -s ' ' | tr '\n' ' ')"
+
       - name: Build Debug
         run: |
           cmake --preset macos-debug
@@ -97,25 +105,41 @@ jobs:
         # The Sandbox opens a window, so --quit-after makes it end on its own after two seconds.
         # The first lines of its output also become a notice on the run's summary page (and in
         # the public API), which shows what macOS reported without opening the full log.
+        # If the runner's virtual Mac has no usable Vulkan GPU, the Sandbox stops with "No suitable
+        # GPU found": that's reported as a warning, since only the startup before it could be tested.
         run: |
           for config in debug release; do
-            ./build/macos-${config}/bin/Sandbox --quit-after 2 2>&1 | tee "run-${config}.log"
-            echo "::notice title=Sandbox ${config}::$(head -n 4 "run-${config}.log" | tr '\n' ' ')"
+            set +e
+            ./build/macos-${config}/bin/Sandbox --quit-after 2 > "run-${config}.log" 2>&1
+            code=$?
+            set -e
+            cat "run-${config}.log"
+            echo "::notice title=Sandbox ${config}::$(head -n 12 "run-${config}.log" | tr '\n' ' ')"
+            if [ "${code}" -ne 0 ]; then
+              if grep -q "No suitable GPU found" "run-${config}.log"; then
+                echo "::warning title=Sandbox ${config}::No suitable Vulkan GPU on this runner; rendering was not tested"
+              else
+                exit "${code}"
+              fi
+            fi
           done
 
       - name: Check VIVA_ASSERT
         timeout-minutes: 2
-        # Debug: a failed assert must log and exit with code 1. Release: asserts compile away, so
-        # --test-assert does nothing, the app runs normally and the exit code is 0.
+        # Debug: --test-assert must fail the assert (log it, exit with code 1). Release: asserts are
+        # compiled out, so it must not fire (the app's own exit code depends on the runner's GPU).
         run: |
           set +e
-          ./build/macos-debug/bin/Sandbox --test-assert --quit-after 2
+          ./build/macos-debug/bin/Sandbox --test-assert --quit-after 2 > assert-debug.log 2>&1
           debugCode=$?
-          ./build/macos-release/bin/Sandbox --test-assert --quit-after 2
-          releaseCode=$?
+          ./build/macos-release/bin/Sandbox --test-assert --quit-after 2 > assert-release.log 2>&1
           set -e
-          echo "Exit codes: Debug ${debugCode} (expected 1), Release ${releaseCode} (expected 0)"
-          if [ "${debugCode}" -ne 1 ] || [ "${releaseCode}" -ne 0 ]; then
-            echo "::error::Unexpected exit codes from Sandbox --test-assert"
+          cat assert-debug.log assert-release.log
+          if [ "${debugCode}" -ne 1 ] || ! grep -q "Assertion failed" assert-debug.log; then
+            echo "::error::Debug: --test-assert should fail the assert and exit with code 1"
+            exit 1
+          fi
+          if grep -q "Assertion failed" assert-release.log; then
+            echo "::error::Release: VIVA_ASSERT should be compiled out"
             exit 1
           fi
