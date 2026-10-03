@@ -9,6 +9,8 @@
 #include "Viva/Time.h"
 #include "Viva/Version.h"
 
+#include <imgui.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -87,6 +89,12 @@ int Application::Run()
         previousTime = now;
         Time::BeginFrame(dt);
 
+        // Dear ImGui's frame starts: from here until ImGui::Render(), the game can build debug
+        // windows (normally in OnUpdate), the way OnGUI code does in Unity. The renderer's half
+        // of ImGui started its frame in BeginFrame.
+        m_Window->NewImGuiFrame();
+        ImGui::NewFrame();
+
         // Fixed timestep: real time goes into an accumulator, and every whole fixed step it holds
         // runs one OnFixedUpdate. At 144 FPS that's sometimes zero calls per frame; at 30 FPS it's
         // one or two. Either way it averages 50 per second, which keeps gameplay that runs in
@@ -100,7 +108,11 @@ int Application::Run()
         }
 
         Time::SetDeltaTime(dt);
-        OnUpdate(dt); // the game updates and submits what to draw
+        OnUpdate(dt); // the game updates, submits what to draw and builds its debug windows
+
+        // The UI is complete: ImGui turns this frame's windows into lists of triangles, which
+        // EndFrame draws over the scene.
+        ImGui::Render();
 
         // Last, like in Unity: draw the frame the game just updated. Once BeginFrame succeeded,
         // EndFrame must follow, even when quitting: it submits the work that signals the frame's

@@ -32,7 +32,8 @@ struct Extent {
 };
 
 // The game window: a thin wrapper around an SDL window. It also owns SDL itself, which is
-// initialized with the window and shut down with it (the engine has exactly one window).
+// initialized with the window and shut down with it (the engine has exactly one window), and
+// Dear ImGui's context with its SDL backend, which turns the window's events into UI input.
 class Window {
 public:
     // Opens the window, centered on the given monitor (see ApplicationSettings::Display). Returns
@@ -48,10 +49,15 @@ public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
 
-    // Handles every pending OS event: quit and resize here, keyboard and mouse in Input.
+    // Handles every pending OS event: Dear ImGui sees all of them first, then quit and resize are
+    // handled here, and keyboard and mouse input goes to Input unless it was meant for ImGui.
     void PollEvents();
     // Sleeps until an event arrives, leaving it queued for the next PollEvents().
     void WaitForEvent() const;
+
+    // Starts Dear ImGui's next frame on the platform side: the window's size and pixel density,
+    // the mouse and the cursor's shape. Call it before ImGui::NewFrame().
+    void NewImGuiFrame();
 
     bool ShouldClose() const { return m_ShouldClose; }
     bool IsMinimized() const;

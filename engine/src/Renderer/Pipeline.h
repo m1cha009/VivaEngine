@@ -2,11 +2,19 @@
 
 #include <vulkan/vulkan.h>
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace Viva {
+
+// Reads a compiled shader, named as in the shaders/ folder: "Unlit.vert" reads the SPIR-V file
+// shaders/Unlit.vert.spv from next to the executable. Returns std::nullopt (after logging why)
+// if it can't.
+std::optional<std::vector<uint8_t>> ReadCompiledShader(const std::string& name);
 
 // What to build a pipeline from. Fill it with designated initializers, like ApplicationSettings:
 //     Pipeline::Create(device, { .VertexShader = "Unlit.vert", .FragmentShader = "Unlit.frag",

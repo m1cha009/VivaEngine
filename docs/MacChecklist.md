@@ -141,3 +141,18 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       loop sleeps while minimized and resumes cleanly, with no validation output.
 - [ ] The frame rate with vsync matches the display (60 or 120 Hz on ProMotion), and mouse look
       feels at least as responsive as before.
+
+## M9: Debug UI
+
+- [ ] **(CI)** Dear ImGui and its SDL3 and Vulkan backends build with Apple Clang (their own
+      warnings are hidden; ours stay at zero), and the Sandbox runs with the UI.
+- [ ] The Stats and Camera windows look the same as on Windows: dark grey backgrounds (not light
+      grey), the same colors and the same physical size.
+- [ ] Text is sharp on a Retina screen: ImGui renders its fonts at the framebuffer scale (2×). The
+      UI is measured in points, so a click lands exactly on the widget under the pointer.
+- [ ] Trackpad scrolling works in the demo window. A two-finger click (the right button) that
+      starts over a debug window doesn't turn the camera; one that starts on the scene does.
+- [ ] **Cmd**+click on a slider types a value (ImGui swaps Ctrl and Cmd on macOS). Copy and paste
+      in that field (Cmd+C/V) use the system clipboard through SDL.
+- [ ] Unchecking VSync rebuilds the swapchain with MAILBOX or IMMEDIATE (whichever MoltenVK or
+      KosmicKrisp offers), and the FPS rises above the display's refresh rate.

@@ -86,3 +86,46 @@ target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_FORCE_R
 # layers and the glslc shader compiler. FindVulkan locates it through the VULKAN_SDK environment
 # variable (Windows, or macOS after sourcing setup-env.sh) or the system-wide install on macOS.
 find_package(Vulkan REQUIRED COMPONENTS glslc)
+
+# --- Dear ImGui: the debug UI ---------------------------------------------------------------
+# An "immediate mode" GUI: code describes the UI anew every frame, like Unity's OnGUI and
+# EditorGUILayout (if (ImGui::Button("Reset")) ...). Its archive has no CMakeLists.txt, so the
+# targets are defined here.
+FetchContent_Declare(imgui
+    URL https://github.com/ocornut/imgui/archive/refs/tags/v1.92.9b.tar.gz
+    URL_HASH SHA256=21d8a0a565e85dce943e375db00812c2f3f0ab21f3f0f7964e364a63422d7f99)
+FetchContent_MakeAvailable(imgui)
+
+# ImGui comes in two parts. The core (imgui.h) is what games call to build their windows. The
+# backends connect it to SDL (input, window size) and to Vulkan (drawing), and only the engine
+# uses them. Both are OBJECT libraries: their files are compiled with ImGui's own settings
+# (without our warnings-as-errors), and the compiled objects then go into the engine library that
+# links them, as if they were the engine's own files.
+add_library(imgui OBJECT
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp)
+add_library(imgui::imgui ALIAS imgui)
+target_include_directories(imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR})
+# The engine's public headers, for Viva/ImGuiConfig.h. A separate call because SYSTEM applies to a
+# whole call, and marked SYSTEM it would hide warnings in the engine's own headers too.
+target_include_directories(imgui PUBLIC ${PROJECT_SOURCE_DIR}/engine/include)
+# Settings that every file including imgui.h must agree on, so they're PUBLIC.
+# IMGUI_USER_CONFIG: imgui.h includes this header first. It routes ImGui's asserts to ours.
+# IMGUI_DISABLE_OBSOLETE_FUNCTIONS: hides old names kept for old code, leaving the current API.
+target_compile_definitions(imgui PUBLIC
+    IMGUI_USER_CONFIG="Viva/ImGuiConfig.h"
+    IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
+# The same C++ version as the rest of the program (MSVC would otherwise compile it as C++14).
+target_compile_features(imgui PUBLIC cxx_std_20)
+
+add_library(imgui_backends OBJECT
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
+add_library(imgui::backends ALIAS imgui_backends)
+target_include_directories(imgui_backends SYSTEM PUBLIC ${imgui_SOURCE_DIR}/backends)
+target_link_libraries(imgui_backends
+    PUBLIC imgui
+    PRIVATE SDL3::SDL3-static Vulkan::Vulkan)

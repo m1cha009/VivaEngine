@@ -1,6 +1,7 @@
 // The sandbox: a small test program that uses the engine the way a game would.
 // It includes only engine headers (Viva/...) and GLM, never SDL or Vulkan.
 
+#include "DebugWindows.h"
 #include "DemoScene.h"
 #include "FlyCamera.h"
 
@@ -14,7 +15,6 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include <format>
 #include <string_view>
 #include <utility>
 
@@ -47,34 +47,23 @@ protected:
         m_Scene.Load(GetRenderer());
 
         Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
-                  "around. Esc quits.");
+                  "around. F1 shows or hides the debug windows. Esc quits.");
     }
 
     void OnUpdate(float dt) override
     {
         m_FlyCamera.Update(GetCamera(), dt);
         m_Scene.Draw(GetRenderer(), static_cast<float>(Time::SinceStart()));
+        m_DebugWindows.Draw(dt, GetRenderer(), GetCamera(), m_FlyCamera);
 
         const bool timeIsUp = m_QuitAfter > 0.0f && Time::SinceStart() >= m_QuitAfter;
         if (Input::GetKeyDown(Key::Escape) || timeIsUp)
             Quit();
-
-        // Once a second, show the frame rate in the title bar and how many fixed updates ran.
-        m_SecondTimer += dt;
-        ++m_FramesThisSecond;
-        if (m_SecondTimer >= 1.0f) {
-            const float fps = static_cast<float>(m_FramesThisSecond) / m_SecondTimer;
-            SetWindowTitle(std::format("{} | {:.0f} FPS | {:.2f} ms", kTitle, fps, 1000.0f / fps));
-            Log::Trace("Last second: {} frames, {} fixed updates", m_FramesThisSecond, m_FixedUpdatesThisSecond);
-            m_SecondTimer = 0.0f;
-            m_FramesThisSecond = 0;
-            m_FixedUpdatesThisSecond = 0;
-        }
     }
 
     void OnFixedUpdate(float /*fixedDt*/) override
     {
-        ++m_FixedUpdatesThisSecond;
+        m_DebugWindows.CountFixedUpdate();
     }
 
     void OnShutdown() override
@@ -85,10 +74,8 @@ protected:
 private:
     DemoScene m_Scene;
     FlyCamera m_FlyCamera;
+    DebugWindows m_DebugWindows;
     float m_QuitAfter = 0.0f;
-    float m_SecondTimer = 0.0f;
-    uint32_t m_FramesThisSecond = 0;
-    uint32_t m_FixedUpdatesThisSecond = 0;
 };
 
 } // namespace

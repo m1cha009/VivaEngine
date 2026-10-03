@@ -6,12 +6,41 @@
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_video.h>
 // SDL's Vulkan helpers. Without vulkan.h included, this header defines VkInstance and VkSurfaceKHR
 // itself, as pointers to the same structs Window.h declares.
 #include <SDL3/SDL_vulkan.h>
 
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
+
 namespace Viva {
+
+namespace {
+
+// Whether an input event belongs to Dear ImGui rather than the game. A click on an ImGui button
+// mustn't also fire the game's gun, and typing a number into an ImGui field mustn't move the
+// camera. At each ImGui::NewFrame(), ImGui says what it wants: the mouse while the pointer is over
+// one of its windows (or dragging one), the keyboard while one of its text fields is active.
+//
+// Only presses are held back. A release always reaches Input, which ignores the release of a key
+// or button it never saw pressed, so nothing the game saw go down can get stuck down.
+bool IsForImGui(const SDL_Event& event)
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    switch (event.type) {
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_WHEEL:
+        return io.WantCaptureMouse;
+    case SDL_EVENT_KEY_DOWN:
+        return io.WantCaptureKeyboard;
+    default:
+        return false;
+    }
+}
+
+} // namespace
 
 std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width, uint32_t height, uint32_t display)
 {
@@ -51,6 +80,27 @@ std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width,
 
     auto window = std::make_unique<Window>(sdlWindow);
     SetInputWindow(sdlWindow); // for Input::SetCursorLocked
+
+    // Dear ImGui, the debug UI. Its context holds all of ImGui's state, and the SDL3 backend feeds
+    // it this window's input, size and pixel density. The window owns both: they're about this
+    // window and need SDL running, and the renderer's half (Renderer/ImGuiRenderer) is created
+    // after the window and destroyed before it.
+    ImGui::CreateContext();
+    // Don't save window positions: ImGui would write imgui.ini into whatever folder the game was
+    // started from.
+    ImGui::GetIO().IniFilename = nullptr;
+    ImGui_ImplSDL3_InitForVulkan(sdlWindow); // always succeeds: it only stores the window and sets callbacks
+
+    // Size the UI for the monitor. Windows reports its display scaling setting (125%, 150%...) as
+    // the content scale, so the UI grows to match. macOS reports 1 and instead gives Retina screens
+    // two pixels per point, which ImGui handles by itself through its framebuffer scale.
+    const float contentScale = SDL_GetDisplayContentScale(displayId);
+    if (contentScale > 0.0f) { // 0 means SDL couldn't tell
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.ScaleAllSizes(contentScale);
+        style.FontScaleDpi = contentScale;
+    }
+
     const Extent pixels = window->GetPixelSize();
     Log::Info("Window: {}x{} points, {}x{} pixels (display scale {:.2f}) on {}", width, height, pixels.Width,
               pixels.Height, SDL_GetWindowDisplayScale(sdlWindow), SDL_GetDisplayName(displayId));
@@ -66,6 +116,9 @@ Window::Window(SDL_Window* window)
 // runs automatically when the object is destroyed (here: when Application resets its unique_ptr).
 Window::~Window()
 {
+    // ImGui's SDL backend and context go first, while SDL is still running.
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
     SetInputWindow(nullptr);
     SDL_DestroyWindow(m_Window);
     SDL_Quit();
@@ -83,6 +136,19 @@ void Window::WaitForEvent() const
     // Given nullptr instead of an event to fill in, SDL blocks until an event arrives but leaves
     // it in the queue, so the next PollEvents() handles it like any other.
     SDL_WaitEvent(nullptr);
+}
+
+void Window::NewImGuiFrame()
+{
+    // While the game has locked the cursor (Input::SetCursorLocked, for mouse look), the hidden
+    // pointer mustn't hover or click ImGui's windows.
+    ImGuiIO& io = ImGui::GetIO();
+    if (SDL_GetWindowRelativeMouseMode(m_Window))
+        io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+    else
+        io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+
+    ImGui_ImplSDL3_NewFrame();
 }
 
 bool Window::IsMinimized() const
@@ -128,6 +194,9 @@ VkSurfaceKHR_T* Window::CreateVulkanSurface(VkInstance_T* instance) const
 
 void Window::HandleEvent(const SDL_Event& event)
 {
+    // ImGui sees every event: the input for its windows, and things like focus changes.
+    ImGui_ImplSDL3_ProcessEvent(&event);
+
     switch (event.type) {
     case SDL_EVENT_QUIT:
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
@@ -139,8 +208,9 @@ void Window::HandleEvent(const SDL_Event& event)
         break;
 
     default:
-        // Keyboard and mouse events (Input ignores everything else).
-        ProcessInputEvent(event);
+        // Keyboard and mouse events (Input ignores everything else), unless they're ImGui's.
+        if (!IsForImGui(event))
+            ProcessInputEvent(event);
         break;
     }
 }

@@ -60,7 +60,8 @@ protected:
 
     // Called once, after the window exists and before the first frame. Like Start().
     virtual void OnStart() {}
-    // Called once per frame, with the frame's duration in seconds. Like Update().
+    // Called once per frame, with the frame's duration in seconds. Like Update(), and also the
+    // place for Dear ImGui debug windows (include <imgui.h>), like OnGUI().
     virtual void OnUpdate(float /*dt*/) {}
     // Called at a fixed rate, 50 times per second by default, no matter the frame rate: zero,
     // one or several times per frame. Like FixedUpdate().

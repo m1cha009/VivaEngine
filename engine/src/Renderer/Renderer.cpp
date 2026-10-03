@@ -7,6 +7,7 @@
 #include "Renderer/FrameUniforms.h"
 #include "Renderer/GpuResource.h"
 #include "Renderer/Image.h"
+#include "Renderer/ImGuiRenderer.h"
 #include "Renderer/Material.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/Pipeline.h"
@@ -80,6 +81,9 @@ public:
     std::shared_ptr<Texture> LoadTexture(const std::string& assetName);
     std::shared_ptr<Material> CreateMaterial(const MaterialSettings& settings);
     void Submit(const Mesh& mesh, const Material& material, const glm::mat4& transform);
+    const RenderStats& GetStats() const { return m_Stats; }
+    void SetVSync(bool enabled);
+    bool IsVSync() const { return m_VSync; }
     bool BeginFrame();
     void EndFrame(const Camera& camera);
 
@@ -87,6 +91,7 @@ private:
     std::shared_ptr<Shader> LoadShader(const std::string& name);
     bool RecreateSwapchain();
     void RecordDraws(VkCommandBuffer cmd);
+    void UpdateMemoryStats();
     static void DestroyReleased(FrameData& frame);
 
     // Hands a new resource to the game as a std::shared_ptr. When the game lets go of the last
@@ -125,6 +130,7 @@ private:
     VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
     std::unique_ptr<Swapchain> m_Swapchain;
     std::unique_ptr<Image> m_DepthImage; // the swapchain images' size, so it's rebuilt with them
+    std::unique_ptr<ImGuiRenderer> m_ImGui; // draws the debug UI over the scene
 
     // The engine's defaults: the shader every material uses, and the texture for materials
     // created without one.
@@ -135,6 +141,7 @@ private:
     std::unordered_map<std::string, std::weak_ptr<Texture>> m_TextureCache;
 
     std::vector<DrawCommand> m_DrawList; // this frame's Submits
+    RenderStats m_Stats;                 // about the last frame drawn
     int m_LiveResources = 0;             // handed to the game and not released yet
     bool m_DestroyNow = false;           // shutting down: release means destroy
 
@@ -163,6 +170,9 @@ Renderer::~Renderer() = default;
 std::shared_ptr<Mesh> Renderer::CreateMesh(const MeshData& data) { return m_Impl->CreateMesh(data); }
 std::shared_ptr<Texture> Renderer::LoadTexture(const std::string& assetName) { return m_Impl->LoadTexture(assetName); }
 std::shared_ptr<Material> Renderer::CreateMaterial(const MaterialSettings& settings) { return m_Impl->CreateMaterial(settings); }
+const RenderStats& Renderer::GetStats() const { return m_Impl->GetStats(); }
+void Renderer::SetVSync(bool enabled) { m_Impl->SetVSync(enabled); }
+bool Renderer::IsVSync() const { return m_Impl->IsVSync(); }
 bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
 void Renderer::EndFrame(const Camera& camera) { m_Impl->EndFrame(camera); }
 
@@ -255,7 +265,12 @@ bool Renderer::Impl::Initialize()
         return false;
     constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
     m_WhiteTexture = Track(Texture::Create(*m_Context, 1, 1, kWhitePixel));
-    return true;
+
+    // The debug UI is drawn in the same rendering as the scene, so its pipeline is built for the
+    // same color and depth formats.
+    m_ImGui = ImGuiRenderer::Create(*m_Context, m_Swapchain->GetFormat(), VulkanContext::kDepthFormat,
+                                    FrameResources::kFramesInFlight);
+    return m_ImGui != nullptr;
 }
 
 std::shared_ptr<Mesh> Renderer::Impl::CreateMesh(const MeshData& data)
@@ -308,6 +323,16 @@ void Renderer::Impl::Submit(const Mesh& mesh, const Material& material, const gl
     if (!m_FrameOpen)
         return;
     m_DrawList.push_back({ .Shader = &material.GetShader(), .Material = &material, .Mesh = &mesh, .Transform = transform });
+}
+
+void Renderer::Impl::SetVSync(bool enabled)
+{
+    // The present mode is picked when the swapchain is built (FIFO for vsync, see Swapchain.cpp),
+    // so switching means building a new one, which the next BeginFrame does.
+    if (enabled == m_VSync)
+        return;
+    m_VSync = enabled;
+    m_SwapchainOutdated = true;
 }
 
 bool Renderer::Impl::RecreateSwapchain()
@@ -395,6 +420,7 @@ bool Renderer::Impl::BeginFrame()
     // whatever the game releases waits in its list.
     m_ReleaseSlot = m_FrameIndex;
     m_FrameOpen = true;
+    m_ImGui->NewFrame();
     return true;
 }
 
@@ -499,6 +525,10 @@ void Renderer::Impl::EndFrame(const Camera& camera)
 
     RecordDraws(cmd);
 
+    // The debug UI goes last, in the same rendering, so it's drawn over the scene. ImGui's
+    // pipeline doesn't test depth, so the scene can't hide it.
+    m_Stats.UiDrawCalls = m_ImGui->Record(cmd);
+
     vkCmdEndRendering(cmd);
 
     // Hand the image to presentation once the drawing's writes are done. Nothing after it in this
@@ -560,10 +590,32 @@ void Renderer::Impl::EndFrame(const Camera& camera)
     else
         VK_CHECK(result);
 
+    UpdateMemoryStats();
+
     // The submits were used up by this frame; the next frame builds its own list.
     m_DrawList.clear();
     m_FrameOpen = false;
     m_FrameIndex = (m_FrameIndex + 1) % FrameResources::kFramesInFlight;
+}
+
+void Renderer::Impl::UpdateMemoryStats()
+{
+    // VMA reports per memory heap (see the heaps logged at startup in Debug builds), and the stats
+    // add them up. vmaGetHeapBudgets is cheap enough to call every frame, unlike
+    // vmaCalculateStatistics. It fills in only the heaps this GPU has; the rest stay zero.
+    VmaBudget budgets[VK_MAX_MEMORY_HEAPS] {};
+    vmaGetHeapBudgets(m_Context->GetAllocator(), budgets);
+
+    m_Stats.GpuAllocations = 0;
+    m_Stats.GpuAllocationBytes = 0;
+    m_Stats.GpuMemoryBlocks = 0;
+    m_Stats.GpuMemoryBlockBytes = 0;
+    for (const VmaBudget& budget : budgets) {
+        m_Stats.GpuAllocations += budget.statistics.allocationCount;
+        m_Stats.GpuAllocationBytes += budget.statistics.allocationBytes;
+        m_Stats.GpuMemoryBlocks += budget.statistics.blockCount;
+        m_Stats.GpuMemoryBlockBytes += budget.statistics.blockBytes;
+    }
 }
 
 void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
@@ -585,6 +637,9 @@ void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
     // m_PipelineLayout, so it stays bound when the pipeline changes.
     const VkDescriptorSet cameraSet = m_Uniforms->GetSet(m_FrameIndex);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &cameraSet, 0, nullptr);
+
+    m_Stats.DrawCalls = static_cast<uint32_t>(m_DrawList.size());
+    m_Stats.Triangles = 0;
 
     const Shader* boundShader = nullptr;
     const Material* boundMaterial = nullptr;
@@ -608,6 +663,7 @@ void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
         const ObjectPushConstants constants { .Model = draw.Transform, .Color = draw.Material->GetColor() };
         vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(constants), &constants);
         draw.Mesh->Draw(cmd);
+        m_Stats.Triangles += draw.Mesh->GetIndexCount() / 3;
     }
 }
 

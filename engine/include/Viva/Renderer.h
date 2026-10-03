@@ -5,6 +5,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -29,6 +30,21 @@ struct MaterialSettings {
     std::shared_ptr<Viva::Texture> Texture;
     // Multiplies the texture's color (and the vertex colors), like a Unity material's Color.
     glm::vec4 Color { 1.0f };
+};
+
+// Numbers about the last frame the renderer drew, for a stats display (see Renderer::GetStats).
+struct RenderStats {
+    // The scene: one draw call per Submit, and the triangles they drew.
+    uint32_t DrawCalls = 0;
+    uint32_t Triangles = 0;
+    // The debug UI's draw calls (Dear ImGui batches many widgets into each one).
+    uint32_t UiDrawCalls = 0;
+    // GPU memory as VMA counts it (M5): every buffer and image is one allocation, and VMA packs
+    // the allocations into a few large blocks of GPU memory. ImGui's own memory isn't included.
+    uint32_t GpuAllocations = 0;
+    uint64_t GpuAllocationBytes = 0;
+    uint32_t GpuMemoryBlocks = 0;
+    uint64_t GpuMemoryBlockBytes = 0;
 };
 
 // The renderer, as games see it: create GPU resources, then say each frame what to draw. Get it
@@ -60,6 +76,14 @@ public:
     // call it every frame, from OnUpdate (the only time a frame is being built).
     void Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                 const glm::mat4& transform);
+
+    // Numbers about the last frame drawn: draw calls, triangles and GPU memory.
+    const RenderStats& GetStats() const;
+
+    // Vsync (see ApplicationSettings::VSync) can be switched while the game runs. The swapchain is
+    // rebuilt with the new present mode before the next frame.
+    void SetVSync(bool enabled);
+    bool IsVSync() const;
 
 private:
     // The engine side, used by Application only. Each frame is BeginFrame, the game's updates

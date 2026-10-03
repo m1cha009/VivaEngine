@@ -25,21 +25,22 @@ VkShaderModule CreateShaderModule(VkDevice device, const std::vector<uint8_t>& c
     return module;
 }
 
-// Where the build puts a compiled shader: shaders/<name>.spv next to the executable (see
-// cmake/Shaders.cmake). This is the only place that knows. ("/" works as a separator on Windows too.)
-std::string CompiledShaderPath(const std::string& name)
-{
-    return GetExecutableDirectory() + "shaders/" + name + ".spv";
-}
-
 } // namespace
+
+std::optional<std::vector<uint8_t>> ReadCompiledShader(const std::string& name)
+{
+    // Where the build puts a compiled shader: shaders/<name>.spv next to the executable (see
+    // cmake/Shaders.cmake). This is the only place that knows. ("/" works as a separator on
+    // Windows too.)
+    return ReadBinaryFile(GetExecutableDirectory() + "shaders/" + name + ".spv");
+}
 
 std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettings& settings)
 {
     // Read both files first: the only step here that can fail on a healthy machine (a missing
     // file). ReadBinaryFile logs which one.
-    const std::optional<std::vector<uint8_t>> vertexCode = ReadBinaryFile(CompiledShaderPath(settings.VertexShader));
-    const std::optional<std::vector<uint8_t>> fragmentCode = ReadBinaryFile(CompiledShaderPath(settings.FragmentShader));
+    const std::optional<std::vector<uint8_t>> vertexCode = ReadCompiledShader(settings.VertexShader);
+    const std::optional<std::vector<uint8_t>> fragmentCode = ReadCompiledShader(settings.FragmentShader);
     if (!vertexCode || !fragmentCode)
         return nullptr;
 

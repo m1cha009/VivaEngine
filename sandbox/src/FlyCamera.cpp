@@ -3,9 +3,10 @@
 #include "Viva/Input.h"
 
 #include <glm/geometric.hpp>
-#include <glm/trigonometric.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 
 using namespace Viva;
 
@@ -17,14 +18,15 @@ void FlyCamera::Update(Camera& camera, float dt) const
     Input::SetCursorLocked(looking);
 
     // Moving the mouse right turns right (Yaw goes down); moving it up looks up (screen y grows
-    // downwards, so Pitch goes the opposite way). Pitch stops just short of straight up or down,
-    // so the view can't flip over.
+    // downwards, so Pitch goes the opposite way). Pitch stops at kMaxPitch.
     if (looking) {
-        constexpr float kMaxPitch = glm::radians(89.0f);
         const glm::vec2 delta = Input::MouseDelta();
         camera.Yaw -= delta.x * LookSensitivity;
         camera.Pitch = std::clamp(camera.Pitch - delta.y * LookSensitivity, -kMaxPitch, kMaxPitch);
     }
+    // Turning round and round would make Yaw grow without end. Keeping it within -180..180 degrees
+    // (the remainder of a division by a full turn) points the camera the same way.
+    camera.Yaw = std::remainder(camera.Yaw, 2.0f * std::numbers::pi_v<float>);
 
     // Moving: add up the directions of the keys held, relative to where the camera looks. Up and
     // down (Q and E) are the world's, like the Scene view.

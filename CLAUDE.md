@@ -238,9 +238,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M9 (debug UI, Dear ImGui) is next. Done: M0–M8 (2026-10-03).
-- **Verified on Windows:** M0–M8, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
-- **CI (macOS):** green through M7. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M10 (scene with Unity-style GameObjects) is next. Done: M0–M9 (M0–M8 on 2026-10-03, M9 on 2026-10-04).
+- **Verified on Windows:** M0–M9, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
+- **CI (macOS):** green through M8. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -455,3 +455,48 @@ Append one line per decision: date, decision, reason.
     - Upload batching / in-frame uploads → when a game creates resources at runtime. A stress test showed per-frame creation halves the frame rate, because each ImmediateSubmit waits for the frame in flight.
     - A sampler cache → M11 (glTF samplers).
   - `VulkanContext::LogMemoryUsage` was removed (no caller). M9's stats can show `vmaGetHeapBudgets`.
+- 2026-10-04: M9 design:
+  - **Dependency:** Dear ImGui 1.92.9b (latest release, 2026-07-31), from the GitHub tag archive pinned by SHA-256. It's built as two OBJECT libraries in `cmake/Dependencies.cmake`:
+    - `imgui` (core + demo), PUBLIC to the engine, so games include `imgui.h`;
+    - `imgui_backends` (`imgui_impl_sdl3` + `imgui_impl_vulkan`), PRIVATE.
+  - **Build details:**
+    - OBJECT libraries compile with ImGui's own settings, and their objects are archived into `VivaEngine.lib`. That avoids a cycle between two static libraries (`AssertFailed` lives in the engine).
+    - They're compiled as C++20; MSVC would default to C++14.
+    - `engine/include` is added to `imgui` in a separate, non-SYSTEM call: `SYSTEM` applies to a whole `target_include_directories` call, and it would have hidden warnings in our own headers.
+  - **Compile-time config:** `IMGUI_USER_CONFIG="Viva/ImGuiConfig.h"` routes `IM_ASSERT` to `Viva::Detail::AssertFailed` (the function `VIVA_ASSERT` calls), with `std::source_location::current()` for ImGui's file and line. The function is declared again there, so `<format>` stays out of ImGui's files. It's gated by `NDEBUG`, like `assert()`. `IMGUI_DISABLE_OBSOLETE_FUNCTIONS` is on.
+  - **Ownership:** `Window` owns the ImGui context and the SDL3 backend. They're created in `Window::Create` after the SDL window and destroyed in `~Window` before `SDL_Quit`. `IniFilename` is null. The style is scaled by `SDL_GetDisplayContentScale`; Retina is handled by ImGui's framebuffer scale.
+  - **Input policy:**
+    - Every event goes to ImGui first.
+    - Presses are held back from `Input` when ImGui wants them: mouse down and wheel on `WantCaptureMouse`, key down on `WantCaptureKeyboard`.
+    - Releases always pass; `Input` ignores the release of a key it never saw pressed.
+    - `ImGuiConfigFlags_NoMouse` is set while relative mouse mode (cursor lock) is on.
+  - **`ImGuiRenderer`** (`Renderer/`) is an RAII wrapper around the Vulkan backend:
+    - dynamic rendering with the swapchain format + D32 depth, drawn in the scene's rendering after the scene;
+    - a backend-owned descriptor pool (`DescriptorPoolSize`);
+    - `MinImageCount = ImageCount = kFramesInFlight`, which the backend uses for its vertex-buffer ring and its texture destroy delay;
+    - `CheckVkResultFn` → `VulkanCallFailed` for negative results;
+    - `ApiVersion = kApiVersion`, so the backend loads the core `vkCmdBeginRendering`.
+  - **sRGB:**
+    - A custom fragment shader (`shaders/ImGui.frag`, via `CustomShaderFragCreateInfo`) decodes the vertex colors from sRGB to linear. It's always used: like the rest of the renderer, it assumes an sRGB swapchain, and `ChooseSurfaceFormat` now warns when it has to fall back to another format.
+    - `WindowBg` and `PopupBg` are made opaque, because blending into an sRGB target happens in linear space.
+    - Rejected: UNORM views of the swapchain images (`VK_KHR_swapchain_mutable_format`) plus a second rendering pass.
+  - **Frame:** `Renderer::BeginFrame` calls `ImGui_ImplVulkan_NewFrame`. `Application` calls `Window::NewImGuiFrame` + `ImGui::NewFrame` after a successful `BeginFrame`, and `ImGui::Render` before `EndFrame`.
+  - **Public API:**
+    - `RenderStats`/`GetStats`: draw calls, triangles, UI draw calls, and VMA statistics summed over the heaps (`vmaGetHeapBudgets` every frame).
+    - `SetVSync`/`IsVSync`: a change marks the swapchain outdated.
+    - `Pipeline.h` exposes `ReadCompiledShader`.
+  - **Sandbox:** `DebugWindows` (Stats + Camera windows, F1). The title-bar FPS was removed; `Application::SetWindowTitle` stays as public API for games.
+  - **Test harness:** posted mouse clicks work when `WM_MOUSEMOVE`, `WM_LBUTTONDOWN` and `WM_LBUTTONUP` are posted back to back. The first posted click after startup is lost, so tests start with a warm-up click.
+- 2026-10-04: M9 `/simplify` pass:
+  - `IM_ASSERT` calls the existing `AssertFailed` (no ImGui-specific failure function), so `Assert.cpp` is unchanged from M8.
+  - The ImGui fragment shader is always used, and the non-sRGB branch is gone (see the M9 design entry).
+  - Removed two members that only recorded that a step had run, when that step can't fail: `Window::m_ImGuiContext` and `ImGuiRenderer::m_Started`.
+  - `FlyCamera::kMaxPitch` is shared with the Camera window's pitch slider. Yaw is wrapped to ±180° in `FlyCamera`, not as a side effect of displaying it.
+  - Efficiency review: nothing to change.
+    - ImGui's font upload waits for the queue only when glyphs change.
+    - `vmaGetHeapBudgets` costs under 1 µs without the memory-budget extension.
+    - ImGui adds about 4.5 s of CPU to a clean Debug build.
+  - Deferred:
+    - **Linear-space blending of translucent UI** (patched for window and popup backgrounds only). Fix when a translucent HUD needs it (M12). Either draw the UI through a UNORM view of the swapchain image (`VK_KHR_swapchain_mutable_format`) in a second rendering pass, or render the scene into an offscreen image that's copied into a UNORM swapchain (the shape post-processing needs).
+    - **Re-applying the UI scale** on `SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED`: keep an unscaled style copy, and use `SDL_GetWindowDisplayScale / SDL_GetWindowPixelDensity`.
+    - **ImGui's font uploads** use the backend's own staging buffer and `vkQueueWaitIdle`. If a game shows lots of changing text, route `ImDrawData::Textures` through the engine's upload path.

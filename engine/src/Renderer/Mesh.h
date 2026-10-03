@@ -41,6 +41,9 @@ public:
     // Draws all its triangles. The mesh must be bound, and so must a pipeline that reads Vertex.
     void Draw(VkCommandBuffer cmd) const;
 
+    // Three per triangle.
+    uint32_t GetIndexCount() const { return m_IndexCount; }
+
 private:
     std::unique_ptr<Buffer> m_VertexBuffer;
     std::unique_ptr<Buffer> m_IndexBuffer;

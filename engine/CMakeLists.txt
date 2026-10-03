@@ -23,6 +23,7 @@ add_library(VivaEngine STATIC
     src/Renderer/FrameResources.cpp
     src/Renderer/FrameUniforms.cpp
     src/Renderer/Image.cpp
+    src/Renderer/ImGuiRenderer.cpp
     src/Renderer/Material.cpp
     src/Renderer/Mesh.cpp
     src/Renderer/Pipeline.cpp
@@ -66,20 +67,22 @@ if(MSVC)
 endif()
 
 # PUBLIC: games use GLM math types through the engine's API, so they get GLM's headers (and its
-# settings, see cmake/Dependencies.cmake) too.
-# PRIVATE: SDL3, VMA, stb_image and Vulkan are implementation details. Their headers aren't
-# visible to games at all, so the sandbox physically can't include them. (Inside the engine, "SDL
-# only in Platform/, Vulkan only in Renderer/" is a convention we follow, not something the build
-# enforces.) The libraries are listed before Vulkan so their headers win if the Vulkan SDK was
-# installed with its optional SDL/GLM/VMA copies.
+# settings, see cmake/Dependencies.cmake) too. Likewise Dear ImGui's core: games build their
+# debug windows with imgui.h.
+# PRIVATE: SDL3, VMA, stb_image, ImGui's SDL and Vulkan backends, and Vulkan are implementation
+# details. Their headers aren't visible to games at all, so the sandbox physically can't include
+# them. (Inside the engine, "SDL only in Platform/, Vulkan only in Renderer/" is a convention we
+# follow, not something the build enforces.) The libraries are listed before Vulkan so their
+# headers win if the Vulkan SDK was installed with its optional SDL/GLM/VMA copies.
 target_link_libraries(VivaEngine
-    PUBLIC glm::glm
-    PRIVATE SDL3::SDL3-static GPUOpen::VulkanMemoryAllocator stb::image Vulkan::Vulkan)
+    PUBLIC glm::glm imgui::imgui
+    PRIVATE SDL3::SDL3-static GPUOpen::VulkanMemoryAllocator stb::image imgui::backends Vulkan::Vulkan)
 
 viva_set_warnings(VivaEngine)
 
 # The renderer's shaders, compiled to SPIR-V into bin/shaders/ whenever the engine is built (see
 # cmake/Shaders.cmake). The engine loads them from there at runtime.
 viva_compile_shaders(VivaEngine
+    ${PROJECT_SOURCE_DIR}/shaders/ImGui.frag
     ${PROJECT_SOURCE_DIR}/shaders/Unlit.vert
     ${PROJECT_SOURCE_DIR}/shaders/Unlit.frag)

@@ -28,7 +28,12 @@ VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice gpu, VkSurfaceKHR surfac
                 return format;
         }
     }
-    return formats[0]; // none of our favorites: take what the surface lists first
+
+    // None of our favorites: take what the surface lists first. Everything we draw assumes an sRGB
+    // swapchain (shaders write linear colors, ImGui's shader decodes its colors), so say so.
+    Log::Warn("The surface offers no 8-bit sRGB format, using {}: colors may look wrong",
+              VkFormatName(formats[0].format));
+    return formats[0];
 }
 
 // How finished images reach the screen:
