@@ -13,7 +13,9 @@
 #include <algorithm>
 #include <optional>
 #include <set>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace Viva {
 
@@ -195,6 +197,44 @@ DeviceInfo CheckDevice(VkPhysicalDevice device, VkSurfaceKHR surface)
     return info;
 }
 
+// Memory properties as short names, like "DEVICE_LOCAL | HOST_VISIBLE" (Buffer.cpp explains them).
+std::string MemoryPropertyNames(VkMemoryPropertyFlags flags)
+{
+    constexpr std::pair<VkMemoryPropertyFlags, std::string_view> kNames[] = {
+        { VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, "DEVICE_LOCAL" },
+        { VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, "HOST_VISIBLE" },
+        { VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "HOST_COHERENT" },
+        { VK_MEMORY_PROPERTY_HOST_CACHED_BIT, "HOST_CACHED" },
+        { VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, "LAZILY_ALLOCATED" },
+    };
+    std::string names;
+    for (const auto& [bit, name] : kNames) {
+        if ((flags & bit) == 0)
+            continue;
+        if (!names.empty())
+            names += " | ";
+        names += name;
+    }
+    return names.empty() ? "no special properties" : names;
+}
+
+// Lists the GPU's memory: its heaps (physical pools of memory, like VRAM and system RAM) and the
+// memory types in each (the ways that memory can be used).
+void LogMemoryHeaps(VkPhysicalDevice device)
+{
+    VkPhysicalDeviceMemoryProperties memory {};
+    vkGetPhysicalDeviceMemoryProperties(device, &memory);
+    for (uint32_t heap = 0; heap < memory.memoryHeapCount; ++heap) {
+        const double gib = static_cast<double>(memory.memoryHeaps[heap].size) / (1024.0 * 1024.0 * 1024.0);
+        const bool onGpu = (memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0;
+        Log::Trace("Memory heap {}: {:.1f} GiB{}", heap, gib, onGpu ? ", on the GPU" : "");
+        for (uint32_t type = 0; type < memory.memoryTypeCount; ++type) {
+            if (memory.memoryTypes[type].heapIndex == heap)
+                Log::Trace("  memory type {}: {}", type, MemoryPropertyNames(memory.memoryTypes[type].propertyFlags));
+        }
+    }
+}
+
 } // namespace
 
 std::unique_ptr<VulkanContext> VulkanContext::Create(const Window& window)
@@ -368,6 +408,7 @@ bool VulkanContext::PickPhysicalDevice()
               DeviceTypeName(properties.properties.deviceType),
               FromVulkanVersion(properties.properties.apiVersion).ToString(), properties12.driverName,
               properties12.driverInfo);
+    LogMemoryHeaps(m_PhysicalDevice);
     return true;
 }
 
@@ -422,6 +463,56 @@ bool VulkanContext::CreateDevice()
     vkGetDeviceQueue(m_Device, m_GraphicsQueueFamily, 0, &m_GraphicsQueue);
     vkGetDeviceQueue(m_Device, m_PresentQueueFamily, 0, &m_PresentQueue);
     return true;
+}
+
+void VulkanContext::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& record) const
+{
+    // A command pool and buffer just for this call. Creating them is cheap next to waiting for
+    // the GPU, and nothing is left over between calls. TRANSIENT: its command buffers are
+    // short-lived.
+    const VkCommandPoolCreateInfo poolInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = m_GraphicsQueueFamily,
+    };
+    VkCommandPool pool = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateCommandPool(m_Device, &poolInfo, nullptr, &pool));
+
+    const VkCommandBufferAllocateInfo allocateInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    VK_CHECK(vkAllocateCommandBuffers(m_Device, &allocateInfo, &cmd));
+
+    const VkCommandBufferBeginInfo beginInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+    record(cmd);
+    VK_CHECK(vkEndCommandBuffer(cmd));
+
+    // Submit, with a fence the GPU signals when it's done, and wait for it.
+    const VkFenceCreateInfo fenceInfo { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+    VkFence fence = VK_NULL_HANDLE;
+    VK_CHECK(vkCreateFence(m_Device, &fenceInfo, nullptr, &fence));
+    const VkCommandBufferSubmitInfo commandInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = cmd,
+    };
+    const VkSubmitInfo2 submitInfo {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos = &commandInfo,
+    };
+    VK_CHECK(vkQueueSubmit2(m_GraphicsQueue, 1, &submitInfo, fence));
+    VK_CHECK(vkWaitForFences(m_Device, 1, &fence, VK_TRUE, UINT64_MAX));
+
+    vkDestroyFence(m_Device, fence, nullptr);
+    vkDestroyCommandPool(m_Device, pool, nullptr); // frees its command buffer too
 }
 
 } // namespace Viva

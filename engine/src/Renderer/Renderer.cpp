@@ -1,12 +1,16 @@
 #include "Renderer/Renderer.h"
 
 #include "Renderer/FrameResources.h"
+#include "Renderer/Mesh.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/VulkanCheck.h"
 #include "Renderer/VulkanContext.h"
 #include "Viva/Assert.h"
 #include "Viva/Time.h"
+
+#include <glm/trigonometric.hpp>
+#include <glm/vec2.hpp>
 
 #include <cmath>
 #include <numbers>
@@ -58,6 +62,58 @@ VkClearColorValue CyclingColor(double seconds)
                0.05f + 0.05f * std::sin(t + 2.0f * kThirdTurn), 1.0f } };
 }
 
+// M5's demo shapes, in clip space: x and y from -1 to 1, y pointing down. Every triangle lists
+// its corners clockwise as seen on screen.
+
+// The RGB triangle from M4, now made of real vertices: three of them, one triangle.
+MeshData Triangle(glm::vec2 center, float size)
+{
+    return {
+        .Vertices = {
+            { { center.x, center.y - size, 0.0f }, { 1.0f, 0.0f, 0.0f } },        // top: red
+            { { center.x + size, center.y + size, 0.0f }, { 0.0f, 1.0f, 0.0f } }, // bottom right: green
+            { { center.x - size, center.y + size, 0.0f }, { 0.0f, 0.0f, 1.0f } }, // bottom left: blue
+        },
+        .Indices = { 0, 1, 2 },
+    };
+}
+
+// A square: two triangles that share two corners (the diagonal), so 4 vertices instead of 6.
+MeshData Quad(glm::vec2 center, float halfSize)
+{
+    return {
+        .Vertices = {
+            { { center.x - halfSize, center.y - halfSize, 0.0f }, { 1.0f, 0.5f, 0.0f } }, // 0 top left: orange
+            { { center.x + halfSize, center.y - halfSize, 0.0f }, { 1.0f, 1.0f, 0.2f } }, // 1 top right: yellow
+            { { center.x + halfSize, center.y + halfSize, 0.0f }, { 0.0f, 0.8f, 1.0f } }, // 2 bottom right: sky blue
+            { { center.x - halfSize, center.y + halfSize, 0.0f }, { 0.6f, 0.0f, 1.0f } }, // 3 bottom left: purple
+        },
+        .Indices = { 0, 1, 2, 2, 3, 0 },
+    };
+}
+
+// A hexagon: a white center vertex plus six rainbow corners, drawn as six triangles that all
+// share the center. 7 vertices instead of 18.
+MeshData Hexagon(glm::vec2 center, float radius)
+{
+    constexpr glm::vec3 kCornerColors[] = {
+        { 1.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
+        { 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 1.0f },
+    };
+    MeshData mesh;
+    mesh.Vertices.push_back({ { center, 0.0f }, { 1.0f, 1.0f, 1.0f } });
+    for (uint32_t i = 0; i < 6; ++i) {
+        // Corner i sits i * 60 degrees around the center. With y pointing down, growing angles go
+        // clockwise on screen.
+        const float angle = glm::radians(60.0f * static_cast<float>(i));
+        const glm::vec2 corner = center + radius * glm::vec2(std::cos(angle), std::sin(angle));
+        mesh.Vertices.push_back({ { corner, 0.0f }, kCornerColors[i] });
+        // Vertex 0 is the center; corners are 1 to 6, and the last triangle wraps back to corner 1.
+        mesh.Indices.insert(mesh.Indices.end(), { 0, 1 + i, 1 + (i + 1) % 6 });
+    }
+    return mesh;
+}
+
 } // namespace
 
 std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
@@ -73,13 +129,20 @@ std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
     if (!renderer->RecreateSwapchain())
         return nullptr;
 
-    renderer->m_TrianglePipeline = Pipeline::Create(renderer->m_Context->GetDevice(), {
-        .VertexShader = "Triangle.vert",
-        .FragmentShader = "Triangle.frag",
+    renderer->m_VertexColorPipeline = Pipeline::Create(renderer->m_Context->GetDevice(), {
+        .VertexShader = "VertexColor.vert",
+        .FragmentShader = "VertexColor.frag",
+        .VertexBindings = kVertexBindings,
+        .VertexAttributes = kVertexAttributes,
         .ColorFormat = renderer->m_Swapchain->GetFormat(),
     });
-    if (!renderer->m_TrianglePipeline)
+    if (!renderer->m_VertexColorPipeline)
         return nullptr;
+
+    // The demo shapes, side by side, uploaded to GPU memory once.
+    for (const MeshData& data : { Triangle({ -0.6f, 0.0f }, 0.3f), Quad({ 0.0f, 0.0f }, 0.25f),
+                                  Hexagon({ 0.6f, 0.0f }, 0.3f) })
+        renderer->m_Meshes.push_back(Mesh::Create(*renderer->m_Context, data));
     return renderer;
 }
 
@@ -271,10 +334,11 @@ void Renderer::DrawFrame()
 
 void Renderer::RecordDraws(VkCommandBuffer cmd)
 {
-    // The triangle: pick the pipeline and draw 3 vertices. The vertex shader makes up their
-    // positions from gl_VertexIndex.
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline->GetHandle());
-    vkCmdDraw(cmd, 3, 1, 0, 0); // 3 vertices, 1 instance, starting at vertex 0 and instance 0
+    // All the meshes use the same pipeline, so it's bound once. Each mesh then binds its own
+    // vertex and index buffers and draws.
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VertexColorPipeline->GetHandle());
+    for (const std::unique_ptr<Mesh>& mesh : m_Meshes)
+        mesh->Draw(cmd);
 }
 
 } // namespace Viva

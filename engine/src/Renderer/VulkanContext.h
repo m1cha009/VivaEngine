@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -43,6 +44,12 @@ public:
     VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
     uint32_t GetPresentQueueFamily() const { return m_PresentQueueFamily; }
     VkQueue GetPresentQueue() const { return m_PresentQueue; }
+
+    // Records commands with `record`, runs them on the graphics queue and waits until the GPU has
+    // finished them. For one-off work while loading, like copying data into GPU memory
+    // (Buffer::CreateWithData). Waiting for the GPU makes it far too slow to use every frame.
+    // std::function is C++'s Action<T>: anything callable, here usually a lambda.
+    void ImmediateSubmit(const std::function<void(VkCommandBuffer)>& record) const;
 
 private:
     // The steps of Create(), in order. Each returns false (after logging why) if it fails.

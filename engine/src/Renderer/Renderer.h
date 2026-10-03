@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 // Vulkan's command buffer handle type, declared without vulkan.h (Window.h does the same for the
 // instance and surface).
@@ -12,6 +13,7 @@ struct VkCommandBuffer_T;
 namespace Viva {
 
 class FrameResources;
+class Mesh;
 class Pipeline;
 class Swapchain;
 class VulkanContext;
@@ -46,12 +48,13 @@ private:
     const Window& m_Window;
     bool m_VSync = true;
 
-    // Declared in creation order, so they're destroyed in reverse: pipeline, swapchain and frames
-    // first, the context (with the device they were made from) last.
+    // Declared in creation order, so they're destroyed in reverse: meshes, pipeline, swapchain and
+    // frames first, the context (with the device they were made from) last.
     std::unique_ptr<VulkanContext> m_Context;
     std::unique_ptr<FrameResources> m_Frames;
     std::unique_ptr<Swapchain> m_Swapchain;
-    std::unique_ptr<Pipeline> m_TrianglePipeline; // M4's hardcoded triangle (M8 moves drawing out)
+    std::unique_ptr<Pipeline> m_VertexColorPipeline;
+    std::vector<std::unique_ptr<Mesh>> m_Meshes; // M5's demo shapes (M8 moves drawing out)
 
     Extent m_SwapchainWindowSize;    // the window's pixel size when the swapchain was built
     bool m_SwapchainOutdated = false; // set when Vulkan reports the swapchain no longer fits

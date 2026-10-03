@@ -55,8 +55,15 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
           .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragmentModule, .pName = "main" },
     };
 
-    // No vertex buffers yet: the vertex shader makes up its own positions (M5 changes that).
-    const VkPipelineVertexInputStateCreateInfo vertexInput { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+    // Where the vertex shader's inputs come from: which vertex buffers ("bindings"), and where
+    // each input ("attribute") sits inside a vertex.
+    const VkPipelineVertexInputStateCreateInfo vertexInput {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = static_cast<uint32_t>(settings.VertexBindings.size()),
+        .pVertexBindingDescriptions = settings.VertexBindings.data(),
+        .vertexAttributeDescriptionCount = static_cast<uint32_t>(settings.VertexAttributes.size()),
+        .pVertexAttributeDescriptions = settings.VertexAttributes.data(),
+    };
 
     // Every three vertices form one triangle.
     const VkPipelineInputAssemblyStateCreateInfo inputAssembly {

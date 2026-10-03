@@ -15,7 +15,9 @@ add_library(VivaEngine STATIC
     src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp
+    src/Renderer/Buffer.cpp
     src/Renderer/FrameResources.cpp
+    src/Renderer/Mesh.cpp
     src/Renderer/Pipeline.cpp
     src/Renderer/Renderer.cpp
     src/Renderer/Swapchain.cpp
@@ -68,5 +70,5 @@ viva_set_warnings(VivaEngine)
 # The renderer's shaders, compiled to SPIR-V into bin/shaders/ whenever the engine is built (see
 # cmake/Shaders.cmake). The engine loads them from there at runtime.
 viva_compile_shaders(VivaEngine
-    ${PROJECT_SOURCE_DIR}/shaders/Triangle.vert
-    ${PROJECT_SOURCE_DIR}/shaders/Triangle.frag)
+    ${PROJECT_SOURCE_DIR}/shaders/VertexColor.vert
+    ${PROJECT_SOURCE_DIR}/shaders/VertexColor.frag)

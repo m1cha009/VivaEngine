@@ -3,20 +3,26 @@
 #include <vulkan/vulkan.h>
 
 #include <memory>
+#include <span>
 #include <string>
 
 namespace Viva {
 
 // What to build a pipeline from. Fill it with designated initializers, like ApplicationSettings:
-//     Pipeline::Create(device, { .VertexShader = "Triangle.vert", .FragmentShader = "Triangle.frag",
+//     Pipeline::Create(device, { .VertexShader = "VertexColor.vert", .FragmentShader = "VertexColor.frag",
 //                                .ColorFormat = format });
-// Later milestones add fields with defaults (the vertex layout in M5, depth and culling in M6),
-// so existing callers keep working.
+// Later milestones add fields with defaults (depth and culling in M6), so existing callers keep
+// working.
 struct PipelineSettings {
-    // Shader names as in the shaders/ folder. "Triangle.vert" loads the compiled
-    // shaders/Triangle.vert.spv from next to the executable.
+    // Shader names as in the shaders/ folder. "VertexColor.vert" loads the compiled
+    // shaders/VertexColor.vert.spv from next to the executable.
     std::string VertexShader;
     std::string FragmentShader;
+    // How the vertex shader's inputs are read from vertex buffers: kVertexBindings and
+    // kVertexAttributes (Mesh.h) for meshes. Left empty, the pipeline reads no vertex buffers and
+    // the vertex shader makes up its own vertices, like M4's triangle did.
+    std::span<const VkVertexInputBindingDescription> VertexBindings;
+    std::span<const VkVertexInputAttributeDescription> VertexAttributes;
     // The format of the image the pipeline draws into (the swapchain's).
     VkFormat ColorFormat = VK_FORMAT_UNDEFINED;
 };
