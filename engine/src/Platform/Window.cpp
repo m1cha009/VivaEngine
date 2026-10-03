@@ -13,7 +13,7 @@
 
 namespace Viva {
 
-std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width, uint32_t height)
+std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width, uint32_t height, uint32_t display)
 {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         Log::Error("SDL_Init failed: {}", SDL_GetError());
@@ -24,7 +24,9 @@ std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width,
     // RESIZABLE: the user can drag its borders.
     // HIGH_PIXEL_DENSITY: on Retina and other high-DPI screens, get the full pixel resolution.
     // Without it, macOS gives us a quarter of the pixels and scales them up, which looks blurry.
-    const SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    // HIDDEN: created invisible, so it can be moved to its monitor before it first appears.
+    const SDL_WindowFlags flags =
+        SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
     SDL_Window* sdlWindow = SDL_CreateWindow(title.c_str(), static_cast<int>(width), static_cast<int>(height), flags);
     if (!sdlWindow) {
         Log::Error("SDL_CreateWindow failed: {}", SDL_GetError());
@@ -32,10 +34,25 @@ std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width,
         return nullptr;
     }
 
+    // Monitors are identified by SDL_DisplayID numbers; SDL_GetDisplays lists them in the OS's
+    // order. The list is SDL's memory on loan to us, so SDL_free hands it back.
+    int displayCount = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays(&displayCount);
+    SDL_DisplayID displayId = SDL_GetPrimaryDisplay();
+    if (displays && display < static_cast<uint32_t>(displayCount))
+        displayId = displays[display];
+    else if (display != 0)
+        Log::Warn("There's no display {}, using the main one", display);
+    SDL_free(displays);
+
+    const int centered = static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(displayId));
+    SDL_SetWindowPosition(sdlWindow, centered, centered);
+    SDL_ShowWindow(sdlWindow);
+
     auto window = std::make_unique<Window>(sdlWindow);
     const Extent pixels = window->GetPixelSize();
-    Log::Info("Window: {}x{} points, {}x{} pixels (display scale {:.2f})", width, height, pixels.Width,
-              pixels.Height, SDL_GetWindowDisplayScale(sdlWindow));
+    Log::Info("Window: {}x{} points, {}x{} pixels (display scale {:.2f}) on {}", width, height, pixels.Width,
+              pixels.Height, SDL_GetWindowDisplayScale(sdlWindow), SDL_GetDisplayName(displayId));
     return window;
 }
 

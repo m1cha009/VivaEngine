@@ -35,9 +35,11 @@ struct Extent {
 // initialized with the window and shut down with it (the engine has exactly one window).
 class Window {
 public:
-    // Opens the window. Returns nullptr if that fails. Without exceptions a constructor has no
-    // way to report failure, so creation goes through this "factory" function instead.
-    static std::unique_ptr<Window> Create(const std::string& title, uint32_t width, uint32_t height);
+    // Opens the window, centered on the given monitor (see ApplicationSettings::Display). Returns
+    // nullptr if that fails. Without exceptions a constructor has no way to report failure, so
+    // creation goes through this "factory" function instead.
+    static std::unique_ptr<Window> Create(const std::string& title, uint32_t width, uint32_t height,
+                                          uint32_t display);
 
     // Takes ownership of an SDL window. Use Create() rather than calling this directly.
     explicit Window(SDL_Window* window);

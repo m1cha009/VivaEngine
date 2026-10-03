@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <format>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -24,8 +25,8 @@ constexpr const char* kTitle = "VivaEngine Sandbox";
 class SandboxApp : public Application {
 public:
     // quitAfter: seconds until the app quits by itself, or 0 to run until Esc or the window closes.
-    SandboxApp(float quitAfter, bool vsync)
-        : Application({ .Title = kTitle, .VSync = vsync })
+    SandboxApp(ApplicationSettings settings, float quitAfter)
+        : Application(std::move(settings))
         , m_QuitAfter(quitAfter)
     {
     }
@@ -112,9 +113,10 @@ int main(int argc, char* argv[])
     //   --test-assert        fail an assert on purpose (Debug builds), to see what that looks like
     //   --quit-after <sec>   quit by itself after that many seconds (used by CI and scripted tests)
     //   --no-vsync           draw as fast as possible instead of waiting for the display
+    //   --display <n>        open the window on monitor n (0 is usually the main one)
+    ApplicationSettings settings { .Title = kTitle };
     bool testAssert = false;
     float quitAfter = 0.0f;
-    bool vsync = true;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg = argv[i];
         if (arg == "--test-assert")
@@ -122,10 +124,13 @@ int main(int argc, char* argv[])
         else if (arg == "--quit-after" && i + 1 < argc)
             quitAfter = std::strtof(argv[++i], nullptr);
         else if (arg == "--no-vsync")
-            vsync = false;
+            settings.VSync = false;
+        else if (arg == "--display" && i + 1 < argc)
+            settings.Display = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
     }
     VIVA_ASSERT(!testAssert, "failing on purpose because of --test-assert");
 
-    SandboxApp app(quitAfter, vsync);
+    // std::move hands the settings over instead of copying them: "settings" isn't used again.
+    SandboxApp app(std::move(settings), quitAfter);
     return app.Run();
 }

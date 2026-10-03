@@ -9,8 +9,8 @@
 # binary format. Compiling during the build turns shader syntax errors into build errors, the
 # same way Unity compiles shaders when it imports them, not when the game runs.
 #
-# Example (from M4 on):
-#   viva_compile_shaders(Sandbox ${PROJECT_SOURCE_DIR}/shaders/Triangle.vert)
+# Call it once per target, listing all of that target's shaders. Example (engine/CMakeLists.txt):
+#   viva_compile_shaders(VivaEngine ${PROJECT_SOURCE_DIR}/shaders/Triangle.vert ...)
 function(viva_compile_shaders target)
     # Assumes a single-config generator like Ninja (all our presets use it), where the
     # executables sit directly in CMAKE_RUNTIME_OUTPUT_DIRECTORY.

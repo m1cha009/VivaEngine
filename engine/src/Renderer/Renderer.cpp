@@ -1,6 +1,7 @@
 #include "Renderer/Renderer.h"
 
 #include "Renderer/FrameResources.h"
+#include "Renderer/Pipeline.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/VulkanCheck.h"
 #include "Renderer/VulkanContext.h"
@@ -47,14 +48,14 @@ void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout
     vkCmdPipelineBarrier2(cmd, &dependency);
 }
 
-// A color that slowly cycles through the hues: red, green and blue each follow a sine wave, a
-// third of a turn apart. (std::numbers::pi is C++20's Mathf.PI.)
+// A dark color that slowly cycles through the hues: red, green and blue each follow a sine wave,
+// a third of a turn apart. (std::numbers::pi is C++20's Mathf.PI.)
 VkClearColorValue CyclingColor(double seconds)
 {
     constexpr float kThirdTurn = 2.0f * std::numbers::pi_v<float> / 3.0f;
     const auto t = static_cast<float>(seconds);
-    return { { 0.5f + 0.5f * std::sin(t), 0.5f + 0.5f * std::sin(t + kThirdTurn),
-               0.5f + 0.5f * std::sin(t + 2.0f * kThirdTurn), 1.0f } };
+    return { { 0.05f + 0.05f * std::sin(t), 0.05f + 0.05f * std::sin(t + kThirdTurn),
+               0.05f + 0.05f * std::sin(t + 2.0f * kThirdTurn), 1.0f } };
 }
 
 } // namespace
@@ -70,6 +71,14 @@ std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
     renderer->m_Frames = std::make_unique<FrameResources>(renderer->m_Context->GetDevice(),
                                                           renderer->m_Context->GetGraphicsQueueFamily());
     if (!renderer->RecreateSwapchain())
+        return nullptr;
+
+    renderer->m_TrianglePipeline = Pipeline::Create(renderer->m_Context->GetDevice(), {
+        .VertexShader = "Triangle.vert",
+        .FragmentShader = "Triangle.frag",
+        .ColorFormat = renderer->m_Swapchain->GetFormat(),
+    });
+    if (!renderer->m_TrianglePipeline)
         return nullptr;
     return renderer;
 }
@@ -149,7 +158,8 @@ void Renderer::DrawFrame()
     // above would leave it unsignaled forever, and the next wait on it would never end.
     VK_CHECK(vkResetFences(device, 1, &frame.InFlight));
 
-    // 3. Record this frame's commands: make the image drawable, clear it, make it presentable.
+    // 3. Record this frame's commands: make the image drawable, clear it and draw into it, make it
+    //    presentable.
     VK_CHECK(vkResetCommandPool(device, frame.CommandPool, 0));
     VkCommandBuffer cmd = frame.CommandBuffer;
     const VkCommandBufferBeginInfo beginInfo {
@@ -168,7 +178,9 @@ void Renderer::DrawFrame()
                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
     // Dynamic rendering: draw straight into the image's view. loadOp CLEAR fills it with the clear
-    // color when rendering begins; storeOp STORE keeps the result for presenting.
+    // color when rendering begins; storeOp STORE keeps the result for presenting. The render area,
+    // viewport and scissor all cover the whole image.
+    const VkExtent2D extent = m_Swapchain->GetExtent();
     const VkRenderingAttachmentInfo colorAttachment {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = m_Swapchain->GetImageView(imageIndex),
@@ -179,13 +191,26 @@ void Renderer::DrawFrame()
     };
     const VkRenderingInfo renderingInfo {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = { .extent = m_Swapchain->GetExtent() },
+        .renderArea = { .extent = extent },
         .layerCount = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments = &colorAttachment,
     };
     vkCmdBeginRendering(cmd, &renderingInfo);
-    // Draw calls will go here (M4).
+
+    // The pipelines' dynamic state: viewport and scissor cover the whole image. Set once here,
+    // they apply to every draw that follows in this command buffer.
+    const VkViewport viewport {
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    const VkRect2D scissor { .extent = extent };
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    RecordDraws(cmd);
+
     vkCmdEndRendering(cmd);
 
     // Hand the image to presentation once the drawing's writes are done. Nothing after it in this
@@ -242,6 +267,14 @@ void Renderer::DrawFrame()
         VK_CHECK(result);
 
     m_FrameIndex = (m_FrameIndex + 1) % FrameResources::kFramesInFlight;
+}
+
+void Renderer::RecordDraws(VkCommandBuffer cmd)
+{
+    // The triangle: pick the pipeline and draw 3 vertices. The vertex shader makes up their
+    // positions from gl_VertexIndex.
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_TrianglePipeline->GetHandle());
+    vkCmdDraw(cmd, 3, 1, 0, 0); // 3 vertices, 1 instance, starting at vertex 0 and instance 0
 }
 
 } // namespace Viva

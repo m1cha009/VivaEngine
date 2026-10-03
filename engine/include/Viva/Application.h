@@ -20,6 +20,9 @@ struct ApplicationSettings {
     // Wait for the display's refresh between frames (no tearing, frame rate = refresh rate).
     // Off: draw as fast as possible.
     bool VSync = true;
+    // Which monitor the window opens on, counting from 0 in the order the OS lists them (0 is
+    // usually the main one). An index with no monitor falls back to the main one.
+    uint32_t Display = 0;
 };
 
 // The base class of a game. It owns the window and the main loop. A game derives from it and

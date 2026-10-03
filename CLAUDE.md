@@ -238,7 +238,7 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M4 (first triangle) is next. Done: M0, M1, M2, M3 (2026-10-03).
+- **Current milestone:** M5 (buffers and GPU memory) is next. Done: M0–M4 (2026-10-03).
 - **Verified on Windows:** M0–M3, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Not yet verified in CLion.
 - **CI (macOS):** green through M2. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
@@ -323,3 +323,14 @@ Append one line per decision: date, decision, reason.
   - `Extent` has a defaulted `==`, and `std::numbers` replaces magic constants.
   - Deferred to M6: a shared image-barrier helper taking a subresource range (depth aspect, mips).
   - Deferred to M8: `BeginFrame` (fence wait + acquire) should run before input is polled. Today the vsync wait comes after `OnUpdate`, which adds up to one refresh of input latency.
+- 2026-10-03: M4 design:
+  - Engine shaders live in `shaders/` and compile via `viva_compile_shaders(VivaEngine …)`.
+  - The `Pipeline` class covers shader modules, an empty layout, `VkPipelineRenderingCreateInfo`, dynamic viewport and scissor, and no culling.
+  - Shaders are loaded from `GetExecutableDirectory()/shaders`; `Platform/FileSystem` uses `SDL_GetBasePath`.
+- 2026-10-03: Michail plays games on his main monitor while Claude tests, so `ApplicationSettings::Display` and the sandbox's `--display <n>` were added. Scripted test runs always open on monitor 1 (the second screen, "ROG PG248Q") and never take focus.
+- 2026-10-03: M4 `/simplify` pass:
+  - `Pipeline::Create(device, PipelineSettings)` takes a settings struct; later milestones add fields with defaults. Callers give shader names, and only `CompiledShaderPath` knows the `shaders/*.spv` layout.
+  - `DrawFrame` sets viewport and scissor once, and `RecordDraws()` holds the draw calls (M8 replaces it).
+  - `ReadBinaryFile` uses `SDL_LoadFile` with UTF-8 `std::string` paths. `std::filesystem::path::string()` can throw on MSVC for non-ASCII paths, which the no-exceptions engine must avoid.
+  - Array counts use `std::size`.
+  - Noted for M8: build pipelines from SPIR-V data (spans) rather than paths, and add a `VkPipelineCache` once there are many pipelines.

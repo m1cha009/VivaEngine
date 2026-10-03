@@ -11,10 +11,12 @@ add_library(VivaEngine STATIC
     src/Core/Time.cpp
     src/Core/Version.cpp
     src/Platform/Debugger.cpp
+    src/Platform/FileSystem.cpp
     src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp
     src/Renderer/FrameResources.cpp
+    src/Renderer/Pipeline.cpp
     src/Renderer/Renderer.cpp
     src/Renderer/Swapchain.cpp
     src/Renderer/VulkanCheck.cpp
@@ -62,3 +64,9 @@ target_link_libraries(VivaEngine
     PRIVATE SDL3::SDL3-static Vulkan::Vulkan)
 
 viva_set_warnings(VivaEngine)
+
+# The renderer's shaders, compiled to SPIR-V into bin/shaders/ whenever the engine is built (see
+# cmake/Shaders.cmake). The engine loads them from there at runtime.
+viva_compile_shaders(VivaEngine
+    ${PROJECT_SOURCE_DIR}/shaders/Triangle.vert
+    ${PROJECT_SOURCE_DIR}/shaders/Triangle.frag)

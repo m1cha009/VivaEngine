@@ -83,3 +83,14 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       new pixel size.
 - [ ] `--no-vsync`: MoltenVK may not offer MAILBOX. The engine then tries IMMEDIATE, then falls
       back to FIFO; check which one the log reports.
+
+## M4: First triangle
+
+- [ ] **(CI)** The shaders compile with the SDK's `glslc` on macOS, and the `.spv` files land in
+      `build/macos-debug/bin/shaders/`.
+- [ ] **File paths:** `SDL_GetBasePath()` returns the executable's folder for a plain binary
+      (inside an app bundle it would be `Contents/Resources/`), and the shaders load from
+      `shaders/` there, whichever folder the Sandbox is started from.
+- [ ] The triangle looks the same as on Windows: red at the top, blue bottom-left, green
+      bottom-right. That's MoltenVK's view of Vulkan clip space, with y pointing down.
+- [ ] `--display 1` with a second monitor opens the window there.

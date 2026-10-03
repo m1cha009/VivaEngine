@@ -8,8 +8,9 @@ target_link_libraries(Sandbox PRIVATE VivaEngine)
 
 viva_set_warnings(Sandbox)
 
-# GLSL files compiled to SPIR-V when the sandbox builds (see cmake/Shaders.cmake).
-# None yet. The first ones arrive in M4.
+# The game's own GLSL shaders, compiled to SPIR-V when the sandbox builds (see
+# cmake/Shaders.cmake). None yet: the renderer's shaders are listed in engine/CMakeLists.txt,
+# and the game gets its own once it decides what to draw (M8).
 viva_compile_shaders(Sandbox)
 
 # install() rules list what a player needs to run the game, like the output folder of a Unity

@@ -39,7 +39,7 @@ int Application::Run()
     Log::Info("VivaEngine {} | SDL {} | Vulkan headers {} | Vulkan loader {}", GetEngineVersion().ToString(),
               GetSDLVersion().ToString(), GetVulkanHeaderVersion().ToString(), GetVulkanLoaderVersion().ToString());
 
-    m_Window = Window::Create(m_Settings.Title, m_Settings.Width, m_Settings.Height);
+    m_Window = Window::Create(m_Settings.Title, m_Settings.Width, m_Settings.Height, m_Settings.Display);
     if (!m_Window)
         return EXIT_FAILURE;
 
