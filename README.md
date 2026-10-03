@@ -114,7 +114,7 @@ It costs nothing, because the repository is public and the workflow uses a stand
   Programs that were already open when the SDK was installed (terminals, CLion) keep their old
   environment. Restart them.
 - **`Could NOT find Vulkan`** (macOS). See [Vulkan SDK](#vulkan-sdk) above.
-- **The first configure is slow.** CMake is cloning SDL3 and GLM into `build/<preset>/_deps/` and
+- **The first configure is slow.** CMake is downloading SDL3 and GLM (about 22 MB) into `build/<preset>/_deps/` and
   then building SDL3. Every preset has its own copy, so this happens once per preset.
 
 ## Layout

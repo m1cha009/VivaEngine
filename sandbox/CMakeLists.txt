@@ -10,4 +10,4 @@ viva_set_warnings(Sandbox)
 
 # GLSL files compiled to SPIR-V when the sandbox builds (see cmake/Shaders.cmake).
 # None yet. The first ones arrive in M4.
-viva_compile_shaders(Sandbox SOURCES)
+viva_compile_shaders(Sandbox)

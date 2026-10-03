@@ -80,16 +80,17 @@ jobs:
           cmake --preset macos-release
           cmake --build --preset macos-release 2>&1 | tee build-release.log
 
-      - name: Check for warnings in our code
-        # Fails on compiler warnings in engine/ or sandbox/, and on linker warnings (the linker only
-        # runs for our Sandbox). Warnings inside SDL's own source files are SDL's business.
+      - name: Check for linker warnings
+        # Compiler warnings in our code already fail the build (our targets treat warnings as
+        # errors). Linker warnings, for example about the macOS deployment target, can't be made
+        # errors that way with CMake 3.25, so they're caught here. The linker only runs for our
+        # Sandbox.
         run: |
-          pattern="^(${GITHUB_WORKSPACE}/)?(engine|sandbox)/[^:]+:[0-9]+:[0-9]+: warning:|^ld: warning:"
-          if grep -E "${pattern}" build-debug.log build-release.log; then
-            echo "::error::Warnings in engine or sandbox code (listed above)"
+          if grep -E "^ld: warning:" build-debug.log build-release.log; then
+            echo "::error::Linker warnings (listed above)"
             exit 1
           fi
-          echo "No warnings in engine or sandbox code."
+          echo "No linker warnings."
 
       - name: Run Sandbox
         run: |

@@ -24,15 +24,9 @@ target_compile_features(VivaEngine PUBLIC cxx_std_20)
 # engine's own .cpp files.
 target_compile_definitions(VivaEngine
     PUBLIC
-        # Defined in Debug builds only. PUBLIC because the VIVA_ASSERT macro, which is
-        # expanded inside game code, checks it.
+        # Defined in Debug builds only. PUBLIC because the VIVA_ASSERT macro and Log, which are
+        # expanded inside game code, check it.
         $<$<CONFIG:Debug>:VIVA_DEBUG>
-        # GLM must be configured identically everywhere it's used, hence PUBLIC.
-        # DEPTH_ZERO_TO_ONE: Vulkan's clip space has depth 0..1, not OpenGL's -1..1.
-        # RADIANS: angles in radians. GLM 1.x always does this and ignores the define, but it
-        # documents the intent.
-        GLM_FORCE_DEPTH_ZERO_TO_ONE
-        GLM_FORCE_RADIANS
     PRIVATE
         # The single source of truth for the version is project(VERSION ...) in the root
         # CMakeLists.txt.
@@ -47,7 +41,8 @@ if(MSVC)
     target_compile_options(VivaEngine PUBLIC /Zc:preprocessor /utf-8)
 endif()
 
-# PUBLIC: games use GLM math types through the engine's API, so they get GLM's headers too.
+# PUBLIC: games use GLM math types through the engine's API, so they get GLM's headers (and its
+# settings, see cmake/Dependencies.cmake) too.
 # PRIVATE: SDL3 and Vulkan are implementation details. Their headers aren't visible to games at
 # all, so the sandbox physically can't include them. (Inside the engine, "SDL only in Platform/,
 # Vulkan only in Renderer/" is a convention we follow, not something the build enforces.)

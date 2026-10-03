@@ -14,17 +14,13 @@ project(VivaEngine
 # Standard C++ only: -std=c++20 instead of the compiler-specific dialect -std=gnu++20.
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Collect every executable in build/<preset>/bin/ and every library in build/<preset>/lib/
-# instead of scattering them across the build tree. Compiled shaders go into bin/ as well
-# (see cmake/Shaders.cmake), so the executable finds them next to itself.
+# Put every executable in build/<preset>/bin/. Compiled shaders go there too (see
+# cmake/Shaders.cmake), so the executable finds them next to itself.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(Dependencies)
-include(CompilerWarnings)
-include(Shaders)
+include(cmake/Dependencies.cmake)
+include(cmake/CompilerWarnings.cmake)
+include(cmake/Shaders.cmake)
 
 add_subdirectory(engine)
 add_subdirectory(sandbox)

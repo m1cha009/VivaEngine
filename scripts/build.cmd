@@ -14,23 +14,25 @@ setlocal
 set "PRESET=%~1"
 if "%PRESET%"=="" set "PRESET=windows-debug"
 
-rem vswhere.exe comes with every Visual Studio and Build Tools install. We ask it for the newest
-rem install that has the x64 C++ compiler; "-products *" is needed to include Build Tools.
+rem vswhere.exe comes with every Visual Studio and Build Tools install. We ask it for vcvars64.bat
+rem in the newest install that has the x64 C++ compiler; "-products *" is needed to include
+rem Build Tools.
 set "VS_INSTALLER=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer"
 if not exist "%VS_INSTALLER%\vswhere.exe" (
     echo error: vswhere.exe not found. Install Visual Studio Build Tools with the C++ workload.
     exit /b 1
 )
+rem vcvars64.bat runs vswhere itself, and prints an error if vswhere isn't on PATH.
 set "PATH=%VS_INSTALLER%;%PATH%"
 
-set "VS_PATH="
-for /f "usebackq delims=" %%i in (`vswhere.exe -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS_PATH=%%i"
-if not defined VS_PATH (
+set "VCVARS="
+for /f "usebackq delims=" %%i in (`vswhere.exe -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find VC\Auxiliary\Build\vcvars64.bat`) do set "VCVARS=%%i"
+if not defined VCVARS (
     echo error: no Visual Studio install with the x64 C++ compiler was found.
     exit /b 1
 )
 
-call "%VS_PATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
+call "%VCVARS%" >nul
 if errorlevel 1 (
     echo error: vcvars64.bat failed.
     exit /b 1

@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <iterator>
 #include <mutex>
 #include <string>
 
@@ -24,17 +25,7 @@ std::string_view LevelName(Log::Level level)
 
 } // namespace
 
-bool Log::IsEnabled(Level level)
-{
-#if defined(VIVA_DEBUG)
-    constexpr Level kMinLevel = Level::Trace;
-#else
-    constexpr Level kMinLevel = Level::Info;
-#endif
-    return level >= kMinLevel;
-}
-
-void Log::Write(Level level, std::string_view message)
+void Log::Write(Level level, std::string_view format, std::format_args args)
 {
     // A static local variable is initialized once, the first time execution reaches it (and
     // C++ guarantees that's thread-safe). So this is the time of the first log line, a rough
@@ -42,7 +33,10 @@ void Log::Write(Level level, std::string_view message)
     static const auto startTime = std::chrono::steady_clock::now();
     const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - startTime;
 
-    const std::string line = std::format("[{:8.3f}] [{:<5}] {}\n", elapsed.count(), LevelName(level), message);
+    // Build the whole line first: the prefix, then the message formatted straight onto its end.
+    std::string line = std::format("[{:8.3f}] [{:<5}] ", elapsed.count(), LevelName(level));
+    std::vformat_to(std::back_inserter(line), format, args);
+    line += '\n';
 
     // Warnings and errors go to stderr, which CLion's console shows in red.
     std::FILE* stream = level >= Level::Warn ? stderr : stdout;

@@ -1,4 +1,4 @@
-# viva_compile_shaders(<target> SOURCES <file>...)
+# viva_compile_shaders(<target> <file>...)
 #
 # Compiles GLSL shaders to SPIR-V with glslc whenever <target> is built, and writes each
 # result next to the executables as build/<preset>/bin/shaders/<file>.spv (Triangle.vert
@@ -10,16 +10,15 @@
 # same way Unity compiles shaders when it imports them, not when the game runs.
 #
 # Example (from M4 on):
-#   viva_compile_shaders(Sandbox SOURCES ${PROJECT_SOURCE_DIR}/shaders/Triangle.vert)
+#   viva_compile_shaders(Sandbox ${PROJECT_SOURCE_DIR}/shaders/Triangle.vert)
 function(viva_compile_shaders target)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES")
-
     # Assumes a single-config generator like Ninja (all our presets use it), where the
     # executables sit directly in CMAKE_RUNTIME_OUTPUT_DIRECTORY.
     set(outputDir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders")
     set(spirvFiles "")
 
-    foreach(source IN LISTS arg_SOURCES)
+    # ARGN holds the arguments that come after the named ones: here, the shader files.
+    foreach(source IN LISTS ARGN)
         # Relative paths are taken relative to the calling CMakeLists.txt.
         get_filename_component(source "${source}" ABSOLUTE)
         get_filename_component(fileName "${source}" NAME)
@@ -42,6 +41,6 @@ function(viva_compile_shaders target)
 
     # The custom target owns the .spv files and <target> depends on it, so building <target>
     # recompiles exactly the shaders whose source changed.
-    add_custom_target(${target}Shaders DEPENDS ${spirvFiles} SOURCES ${arg_SOURCES})
+    add_custom_target(${target}Shaders DEPENDS ${spirvFiles} SOURCES ${ARGN})
     add_dependencies(${target} ${target}Shaders)
 endfunction()

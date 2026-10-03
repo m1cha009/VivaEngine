@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
     Log::Info("Vulkan headers {}", GetVulkanHeaderVersion().ToString());
     Log::Info("Vulkan loader {}", GetVulkanLoaderVersion().ToString());
     // GLM is header-only and part of the engine's public API, so the sandbox uses it directly.
-    Log::Info("GLM {}.{}.{}", GLM_VERSION_MAJOR, GLM_VERSION_MINOR, GLM_VERSION_PATCH);
+    Log::Info("GLM {}", Version{ GLM_VERSION_MAJOR, GLM_VERSION_MINOR, GLM_VERSION_PATCH }.ToString());
     Log::Trace("Trace messages like this one only appear in Debug builds");
 
     // "Sandbox --test-assert" shows what a failed assertion looks like (Debug builds only:
