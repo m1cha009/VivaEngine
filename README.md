@@ -1,5 +1,7 @@
 # VivaEngine
 
+[![macOS build](https://github.com/m1cha009/VivaEngine/actions/workflows/macos.yml/badge.svg)](https://github.com/m1cha009/VivaEngine/actions/workflows/macos.yml)
+
 A small game engine in C++20 and Vulkan 1.3, built one milestone at a time to learn how game
 engines work.
 
@@ -90,6 +92,18 @@ cmake --build --preset macos-debug
 ./build/macos-debug/bin/Sandbox
 ```
 
+## Continuous integration (macOS)
+
+Every push to `main` triggers [`.github/workflows/macos.yml`](.github/workflows/macos.yml) on a
+GitHub-hosted Apple Silicon Mac. It installs the Vulkan SDK, builds `macos-debug` and
+`macos-release` with Apple Clang, fails on any warning in our code, and runs the Sandbox. Results
+show up in the repository's **Actions** tab, as the badge at the top of this README, and as a green
+check or red cross next to each commit. GitHub emails you when a run fails. You can also start a
+run by hand: Actions → macOS build → **Run workflow**.
+
+It costs nothing, because the repository is public and the workflow uses a standard runner
+(`macos-latest`). Don't change it to a `-large` or `-xlarge` runner: those are always billed.
+
 ## Troubleshooting
 
 - **`The CMAKE_CXX_COMPILER: cl is not a full path and was not found in the PATH`** (Windows).
@@ -113,4 +127,5 @@ cmake --build --preset macos-debug
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
 | `assets/` | Game assets (empty for now) |
 | `scripts/` | `build.cmd`, the Windows command-line build helper |
+| `.github/workflows/` | The macOS CI build |
 | `docs/` | Milestone explainers and the macOS checklist |

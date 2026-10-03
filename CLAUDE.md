@@ -44,11 +44,11 @@
 ## Platforms
 
 - **Windows x64** with an NVIDIA RTX 3080 Ti. This is the main dev machine and the **only platform tested for now**. The toolchain is MSVC from Visual Studio Build Tools (no VS IDE), with CMake, Ninja, Git, the Vulkan SDK, CLion and RenderDoc installed and verified.
-- **macOS on an M1 Pro** (Apple Silicon). This is a **future target**. Michail won't test on the Mac until the engine is functional, so:
+- **macOS on an M1 Pro** (Apple Silicon). This is a **future target**. Michail won't test on the Mac until **all milestones are completed**, so:
   - All code must stay Mac-ready, following the rules below, and the macOS presets must exist.
   - Never block a milestone on Mac verification.
   - Keep a running list of things to check on the Mac in `docs/MacChecklist.md`, adding to it whenever a milestone adds platform-sensitive code (surface, swapchain, portability, Retina sizing, file paths).
-  - In M0, *propose* a GitHub Actions workflow that compiles the project on a macOS runner, to catch Apple Clang errors early. Add it only if Michail agrees.
+  - The GitHub Actions workflow `.github/workflows/macos.yml` builds Debug and Release with Apple Clang and runs the Sandbox on every push to `main`. It's the early warning for Mac problems, so keep it green: a milestone that breaks it isn't done. It must stay free: only standard runners (`macos-latest`), never `-large`/`-xlarge` labels, and no artifacts or caches.
 
 ### Vulkan on macOS requirements
 
@@ -70,6 +70,7 @@
 
 ```
 VivaEngine/
+├── .github/workflows/      # macos.yml: free macOS CI build on every push to main
 ├── CLAUDE.md
 ├── README.md               # how to build/run on Windows and macOS
 ├── CMakeLists.txt
@@ -236,7 +237,7 @@ Run these and report the results:
 
 - **Current milestone:** M0 (project skeleton) done, awaiting Michail's review. Next up: M1.
 - **Verified on Windows:** M0, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Not yet verified in CLion.
-- **Verified on macOS:** deferred until the engine is functional (see `docs/MacChecklist.md`)
+- **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
 ## Decision log
@@ -254,3 +255,5 @@ Append one line per decision: date, decision, reason.
 - 2026-10-03: A failed `VIVA_ASSERT` logs, then calls `BreakIntoDebuggerOrExit()` (`Platform/Debugger.cpp`): it breaks if a debugger is attached, otherwise exits with `std::_Exit(1)`. Not `std::abort()`, whose MSVC Debug dialog would block CLion runs and scripted runs. `VK_CHECK` (M2) will reuse it.
 - 2026-10-03: "No exceptions" means engine code never throws or catches. Compiler exception support stays at the default (`/EHsc`), because the standard library itself may throw.
 - 2026-10-03: M0 also prints the Vulkan loader version (`vkEnumerateInstanceVersion`), which proves the loader links and loads at runtime, not just that the headers are found.
+- 2026-10-03: Michail's decision: Mac testing is deferred until all milestones are completed (previously: until the engine is functional).
+- 2026-10-03: Added the macOS CI workflow (`.github/workflows/macos.yml`), approved by Michail on the condition that it costs nothing. The repo is public, and GitHub's billing docs say Actions minutes are free for public repositories on standard GitHub-hosted runners. `macos-latest` (macOS 26, arm64, M1) is a standard runner; larger runners are always billed. The workflow builds Debug and Release in one job (one 396 MB SDK download per run). It installs Vulkan SDK 1.4.363.0 unattended with LunarG's installer, including `com.lunarg.vulkan.usr` (System Global Installation). It fails on warnings in `engine/`/`sandbox/` and on linker warnings, then runs the Sandbox and checks `--test-assert` exit codes. Open question for M2: whether the runner's virtual GPU can create a Vulkan device. If not, GPU steps stay build-only in CI.

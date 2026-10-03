@@ -1,0 +1,113 @@
+# macOS build check
+#
+# Builds VivaEngine with Apple Clang on a GitHub-hosted Apple Silicon Mac, in Debug and Release,
+# and runs the Sandbox. The real Mac only gets tested after the last milestone, so this catches
+# Apple Clang errors and warnings early, while they're still small.
+#
+# Cost: free. GitHub Actions minutes are free for public repositories on standard GitHub-hosted
+# runners, and macos-latest is one. Never switch to a "-large" or "-xlarge" label: those are
+# larger runners, which are always billed. This workflow also stores no artifacts or caches.
+#
+# Results: the Actions tab of the repository on GitHub, and the green check or red cross next to
+# each commit.
+
+name: macOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # adds a "Run workflow" button in the Actions tab
+
+# The workflow only reads the code, so its access token gets no write permissions.
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the check that's still running for the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VULKAN_SDK_VERSION: 1.4.363.0 # keep in step with the SDK on the Windows dev machine
+
+jobs:
+  build:
+    # Apple Silicon (arm64) like the M1 Pro. "latest" follows Apple's newest macOS and Xcode,
+    # which is what the Mac will have by the time it's tested.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Naming bash explicitly makes it "bash -eo pipefail": a step stops at the first failing
+        # command, even one in the middle of a pipe like "cmake ... | tee build.log".
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          cmake --version
+          command -v ninja || brew install ninja
+          ninja --version
+
+      - name: Install the Vulkan SDK
+        # LunarG's unattended install, from their macOS "Getting Started" guide. The component
+        # com.lunarg.vulkan.usr is the installer's "System Global Installation" checkbox: it copies
+        # the loader, headers and tools into /usr/local, where CMake finds them without help. That's
+        # the same setup the README recommends for the Mac.
+        run: |
+          app="vulkansdk-macOS-${VULKAN_SDK_VERSION}.app"
+          curl -fsSL -o vulkansdk.zip "https://sdk.lunarg.com/sdk/download/${VULKAN_SDK_VERSION}/mac/vulkansdk-macos-${VULKAN_SDK_VERSION}.zip"
+          unzip -q vulkansdk.zip
+          sudo "./${app}/Contents/MacOS/vulkansdk-macOS-${VULKAN_SDK_VERSION}" \
+            --root "${HOME}/VulkanSDK/${VULKAN_SDK_VERSION}" \
+            --accept-licenses --default-answer --confirm-command \
+            install com.lunarg.vulkan.core com.lunarg.vulkan.usr
+          rm -rf vulkansdk.zip "${app}"
+          glslc --version
+
+      - name: Build Debug
+        run: |
+          cmake --preset macos-debug
+          cmake --build --preset macos-debug 2>&1 | tee build-debug.log
+
+      - name: Build Release
+        run: |
+          cmake --preset macos-release
+          cmake --build --preset macos-release 2>&1 | tee build-release.log
+
+      - name: Check for warnings in our code
+        # Fails on compiler warnings in engine/ or sandbox/, and on linker warnings (the linker only
+        # runs for our Sandbox). Warnings inside SDL's own source files are SDL's business.
+        run: |
+          pattern="^(${GITHUB_WORKSPACE}/)?(engine|sandbox)/[^:]+:[0-9]+:[0-9]+: warning:|^ld: warning:"
+          if grep -E "${pattern}" build-debug.log build-release.log; then
+            echo "::error::Warnings in engine or sandbox code (listed above)"
+            exit 1
+          fi
+          echo "No warnings in engine or sandbox code."
+
+      - name: Run Sandbox
+        run: |
+          ./build/macos-debug/bin/Sandbox
+          ./build/macos-release/bin/Sandbox
+
+      - name: Check VIVA_ASSERT
+        # Debug: a failed assert must log and exit with code 1. Release: asserts compile away, so
+        # --test-assert does nothing and the exit code is 0.
+        run: |
+          set +e
+          ./build/macos-debug/bin/Sandbox --test-assert
+          debugCode=$?
+          ./build/macos-release/bin/Sandbox --test-assert
+          releaseCode=$?
+          set -e
+          echo "Exit codes: Debug ${debugCode} (expected 1), Release ${releaseCode} (expected 0)"
+          if [ "${debugCode}" -ne 1 ] || [ "${releaseCode}" -ne 0 ]; then
+            echo "::error::Unexpected exit codes from Sandbox --test-assert"
+            exit 1
+          fi
