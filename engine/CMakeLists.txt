@@ -1,0 +1,60 @@
+# The engine: a static library that games link against.
+#
+# A static library (.lib on Windows, .a on macOS) is a bundle of compiled code that the linker
+# copies into the final executable. The closest C# equivalent is a class library DLL that your
+# game references, except that nothing is loaded at runtime: the code ends up inside the .exe.
+
+add_library(VivaEngine STATIC
+    src/Core/Assert.cpp
+    src/Core/Log.cpp
+    src/Core/Version.cpp
+    src/Platform/Debugger.cpp
+    src/Platform/SDLVersion.cpp
+    src/Renderer/VulkanVersion.cpp)
+
+# include/ is the public API that games see. src/ is private to the engine.
+target_include_directories(VivaEngine
+    PUBLIC include
+    PRIVATE src)
+
+target_compile_features(VivaEngine PUBLIC cxx_std_20)
+
+# Compile definitions are -D flags for the compiler, much like Unity's Scripting Define Symbols.
+# PUBLIC ones also apply to every target that links the engine; PRIVATE ones only to the
+# engine's own .cpp files.
+target_compile_definitions(VivaEngine
+    PUBLIC
+        # Defined in Debug builds only. PUBLIC because the VIVA_ASSERT macro, which is
+        # expanded inside game code, checks it.
+        $<$<CONFIG:Debug>:VIVA_DEBUG>
+        # GLM must be configured identically everywhere it's used, hence PUBLIC.
+        # DEPTH_ZERO_TO_ONE: Vulkan's clip space has depth 0..1, not OpenGL's -1..1.
+        # RADIANS: angles in radians. GLM 1.x always does this and ignores the define, but it
+        # documents the intent.
+        GLM_FORCE_DEPTH_ZERO_TO_ONE
+        GLM_FORCE_RADIANS
+    PRIVATE
+        # The single source of truth for the version is project(VERSION ...) in the root
+        # CMakeLists.txt.
+        VIVA_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        VIVA_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+        VIVA_VERSION_PATCH=${PROJECT_VERSION_PATCH})
+
+if(MSVC)
+    # /Zc:preprocessor switches MSVC to its standard-conforming preprocessor. VIVA_ASSERT relies
+    # on C++20's __VA_OPT__, and the macro is expanded in whichever file uses it, so this is
+    # PUBLIC. /utf-8 reads source files as UTF-8 and stores strings as UTF-8, like Clang does.
+    target_compile_options(VivaEngine PUBLIC /Zc:preprocessor /utf-8)
+endif()
+
+# PUBLIC: games use GLM math types through the engine's API, so they get GLM's headers too.
+# PRIVATE: SDL3 and Vulkan are implementation details. Their headers aren't visible to games at
+# all, so the sandbox physically can't include them. (Inside the engine, "SDL only in Platform/,
+# Vulkan only in Renderer/" is a convention we follow, not something the build enforces.)
+# SDL3 and GLM are listed before Vulkan so their headers win if the Vulkan SDK was installed
+# with its optional SDL/GLM copies.
+target_link_libraries(VivaEngine
+    PUBLIC glm::glm
+    PRIVATE SDL3::SDL3-static Vulkan::Vulkan)
+
+viva_set_warnings(VivaEngine)

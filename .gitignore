@@ -1,0 +1,16 @@
+# Build output (presets build into build/<preset>/; CLion's own profiles use cmake-build-*)
+build/
+out/
+cmake-build-*/
+
+# Machine-specific CMake preset overrides
+CMakeUserPresets.json
+
+# IDEs
+.idea/
+.vs/
+.vscode/
+
+# OS clutter
+.DS_Store
+Thumbs.db
