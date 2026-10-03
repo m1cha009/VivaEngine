@@ -179,3 +179,15 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       files' exact case, because a macOS volume can be case-sensitive.
 - [ ] Destroying "Truck pivot" in the inspector frees its 9 allocations, as on Windows, with no
       validation output.
+
+## M12: Lane Runner
+
+- [ ] **(CI)** The game and the demo scene (`--demo`) both run in Debug and Release, with no errors
+      in the log.
+- [ ] The game plays as on Windows: Space starts, A/D and the arrow keys change lanes, a crash shows
+      "Crashed!", Space restarts.
+- [ ] The HUD text is sharp on a Retina screen and the same size as on Windows: it's measured in
+      points, and ImGui renders the scalable font at the framebuffer's 2× scale.
+- [ ] At 144 km/h the frame rate holds the display's refresh (60 or 120 Hz with ProMotion), and the
+      road shows no flickering against the grass far away.
+- [ ] F1 shows the debug windows over the HUD; Esc and Cmd+Q quit.

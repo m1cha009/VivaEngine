@@ -5,6 +5,7 @@
 #include "Viva/MeshRenderer.h"
 #include "Viva/Renderer.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace Viva {
@@ -26,6 +27,14 @@ void Scene::Destroy(GameObject& gameObject)
     // Only marked for now: the frame may still be running code that uses it. Scene::Render
     // removes it before drawing.
     gameObject.MarkDestroyed();
+}
+
+bool Scene::Contains(const GameObject* gameObject) const
+{
+    // std::ranges::any_of asks the lambda about each element until one says yes (C#'s LINQ Any).
+    return std::ranges::any_of(m_GameObjects, [gameObject](const std::unique_ptr<GameObject>& candidate) {
+        return candidate.get() == gameObject;
+    });
 }
 
 Camera* Scene::GetMainCamera() const
@@ -61,6 +70,11 @@ void Scene::Update(float dt)
     StartNewComponents();
     for (size_t i = 0; i < m_GameObjects.size(); ++i)
         m_GameObjects[i]->UpdateComponents(dt);
+    // Then every LateUpdate, once everything has moved. Within each pass the GameObjects take
+    // turns in the order they were created, an order games shouldn't rely on: this split is what
+    // says what comes after what.
+    for (size_t i = 0; i < m_GameObjects.size(); ++i)
+        m_GameObjects[i]->LateUpdateComponents(dt);
 }
 
 void Scene::Render(Renderer& renderer)
@@ -71,6 +85,7 @@ void Scene::Render(Renderer& renderer)
     if (!camera)
         return;
     renderer.SetCamera(camera->ViewMatrix(), camera->ProjectionMatrix(renderer.GetAspectRatio()));
+    renderer.SetClearColor(camera->BackgroundColor);
 
     for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects) {
         if (!gameObject->CanUpdate())

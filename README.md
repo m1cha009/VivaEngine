@@ -9,6 +9,13 @@ engines work.
 - [`docs/milestones/`](docs/milestones/): one explainer per milestone (start with [`M0.md`](docs/milestones/M0.md)). Each describes the code as of its milestone's commit (`git log --oneline` lists them; `git checkout <commit>` to follow along exactly).
 - [`docs/MacChecklist.md`](docs/MacChecklist.md): things to verify when building on macOS
 
+## Lane Runner
+
+The Sandbox is a small game made with the engine ([M12](docs/milestones/M12.md)): drive a milk truck
+down an endless three-lane road, dodge the crates and collect the logo boxes while the speed rises.
+Space starts, A/D or the arrow keys change lanes, F1 shows the debug windows, Esc quits.
+`Sandbox --demo` shows the engine's demo scene (M10, M11) instead.
+
 ## Prerequisites
 
 | | Windows | macOS |
@@ -124,7 +131,7 @@ It costs nothing, because the repository is public and the workflow uses a stand
 | Folder | Contents |
 |---|---|
 | `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code), `Renderer/` (the only place for Vulkan) and `Scene/` (GameObjects, components, transforms, model loading). |
-| `sandbox/` | The `Sandbox` executable, a test app that uses the engine the way a game would |
+| `sandbox/` | The `Sandbox` executable: the Lane Runner game, and with `--demo` the engine's demo scene. It uses the engine the way any game would |
 | `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation, asset copying |
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
 | `assets/` | Game assets: textures (from `scripts/make-textures.ps1`) and glTF models (credits in `assets/models/CREDITS.md`) |

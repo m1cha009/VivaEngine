@@ -57,17 +57,18 @@ MeshData Cube()
     return mesh;
 }
 
-MeshData Plane(float size, float textureRepeats)
+MeshData Plane(float width, float length, const glm::vec2& textureRepeats)
 {
-    const float half = size / 2.0f;
+    const float halfWidth = width / 2.0f;
+    const float halfLength = length / 2.0f;
     // Seen from above (-Z at the top), these corners go top-left, bottom-left, bottom-right,
     // top-right: counter-clockwise, so the plane's front faces up.
     MeshData mesh;
     AddQuad(mesh, { {
-        { .Position = { -half, 0.0f, -half }, .Color = kWhite, .UV = { 0.0f, 0.0f } },
-        { .Position = { -half, 0.0f, half }, .Color = kWhite, .UV = { 0.0f, textureRepeats } },
-        { .Position = { half, 0.0f, half }, .Color = kWhite, .UV = { textureRepeats, textureRepeats } },
-        { .Position = { half, 0.0f, -half }, .Color = kWhite, .UV = { textureRepeats, 0.0f } },
+        { .Position = { -halfWidth, 0.0f, -halfLength }, .Color = kWhite, .UV = { 0.0f, 0.0f } },
+        { .Position = { -halfWidth, 0.0f, halfLength }, .Color = kWhite, .UV = { 0.0f, textureRepeats.y } },
+        { .Position = { halfWidth, 0.0f, halfLength }, .Color = kWhite, .UV = textureRepeats },
+        { .Position = { halfWidth, 0.0f, -halfLength }, .Color = kWhite, .UV = { textureRepeats.x, 0.0f } },
     } });
     return mesh;
 }

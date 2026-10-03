@@ -3,6 +3,7 @@
 
 #include "DebugWindows.h"
 #include "DemoScene.h"
+#include "LaneRunnerScene.h"
 
 #include "Viva/Application.h"
 #include "Viva/Assert.h"
@@ -20,27 +21,39 @@ namespace {
 // Fine in a .cpp file. In a header it would leak into every file that includes it.
 using namespace Viva;
 
-constexpr const char* kTitle = "VivaEngine Sandbox";
+constexpr const char* kTitle = "VivaEngine Lane Runner";
+constexpr const char* kDemoTitle = "VivaEngine Sandbox";
 
 // The game itself. It derives from Application and overrides the parts it needs, the way a
 // MonoBehaviour overrides Start and Update. The scene's objects bring their own behavior as
-// components (FlyCamera, Spinner); this class handles what concerns the whole game.
+// components (TruckController, FollowCamera, LaneRunner...); this class handles what concerns
+// the whole program.
 class SandboxApp : public Application {
 public:
     // quitAfter: seconds until the app quits by itself, or 0 to run until Esc or the window closes.
-    SandboxApp(ApplicationSettings settings, float quitAfter)
+    // demo: show the engine's demo scene (M10, M11) instead of the Lane Runner game.
+    SandboxApp(ApplicationSettings settings, float quitAfter, bool demo)
         : Application(std::move(settings))
         , m_QuitAfter(quitAfter)
+        , m_Demo(demo)
     {
     }
 
 protected:
     void OnStart() override
     {
-        LoadDemoScene(GetScene(), GetRenderer());
+        if (m_Demo) {
+            LoadDemoScene(GetScene(), GetRenderer());
+            Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
+                      "around. F1 shows or hides the debug windows. Esc quits.");
+            return;
+        }
 
-        Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
-                  "around. F1 shows or hides the debug windows. Esc quits.");
+        LoadLaneRunnerScene(GetScene(), GetRenderer());
+        // The game has its own HUD; the debug windows wait for F1.
+        m_DebugWindows.SetVisible(false);
+        Log::Info("Lane Runner: Space drives, A/D or the arrow keys change lanes. F1 shows or hides the debug "
+                  "windows. Esc quits.");
     }
 
     void OnUpdate(float dt) override
@@ -65,6 +78,7 @@ protected:
 private:
     DebugWindows m_DebugWindows;
     float m_QuitAfter = 0.0f;
+    bool m_Demo = false;
 };
 
 } // namespace
@@ -76,8 +90,10 @@ int main(int argc, char* argv[])
     //   --quit-after <sec>   quit by itself after that many seconds (used by CI and scripted tests)
     //   --no-vsync           draw as fast as possible instead of waiting for the display
     //   --display <n>        open the window on monitor n (0 is usually the main one)
+    //   --demo               show the engine's demo scene instead of the game
     ApplicationSettings settings { .Title = kTitle };
     bool testAssert = false;
+    bool demo = false;
     float quitAfter = 0.0f;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg = argv[i];
@@ -89,10 +105,14 @@ int main(int argc, char* argv[])
             settings.VSync = false;
         else if (arg == "--display" && i + 1 < argc)
             settings.Display = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+        else if (arg == "--demo")
+            demo = true;
     }
+    if (demo)
+        settings.Title = kDemoTitle;
     VIVA_ASSERT(!testAssert, "failing on purpose because of --test-assert");
 
     // std::move hands the settings over instead of copying them: "settings" isn't used again.
-    SandboxApp app(std::move(settings), quitAfter);
+    SandboxApp app(std::move(settings), quitAfter, demo);
     return app.Run();
 }

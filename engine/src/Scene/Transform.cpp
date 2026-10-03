@@ -5,6 +5,7 @@
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/mat3x3.hpp>
 
 namespace Viva {
 
@@ -57,6 +58,33 @@ glm::vec3 Transform::Right() const
 glm::vec3 Transform::Up() const
 {
     return glm::normalize(glm::vec3(WorldMatrix()[1]));
+}
+
+glm::quat Transform::GetRotation() const
+{
+    // Like WorldMatrix: the parent's rotation, then this one's on top (applied right to left).
+    return m_Parent ? m_Parent->GetRotation() * LocalRotation : LocalRotation;
+}
+
+void Transform::LookAt(const glm::vec3& worldPoint, const glm::vec3& worldUp)
+{
+    // The wanted rotation, built from its three axes in world space (the columns of its matrix):
+    // +Z towards the point, +X at right angles to both up and +Z (that's what a cross product
+    // gives), and +Y at right angles to the other two. A zero cross product means the point is
+    // straight along up, or at the object itself. (GLM has this as glm::quatLookAtLH, where "LH"
+    // means +Z towards the point: this engine's Forward.)
+    const glm::vec3 toPoint = worldPoint - GetPosition();
+    const glm::vec3 xAxis = glm::cross(worldUp, toPoint);
+    if (glm::length(xAxis) < 1e-6f)
+        return;
+    const glm::vec3 z = glm::normalize(toPoint);
+    const glm::vec3 x = glm::normalize(xAxis);
+    const glm::vec3 y = glm::cross(z, x);
+    const glm::quat worldRotation = glm::quat_cast(glm::mat3(x, y, z));
+
+    // LocalRotation is relative to the parent, so the parent's rotation is taken back out: the
+    // inverse of a rotation undoes it.
+    LocalRotation = m_Parent ? glm::inverse(m_Parent->GetRotation()) * worldRotation : worldRotation;
 }
 
 void Transform::SetParent(Transform* parent)

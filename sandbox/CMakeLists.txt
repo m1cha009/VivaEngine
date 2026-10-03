@@ -1,10 +1,17 @@
-# The sandbox: an executable that uses the engine the way a game would.
+# The sandbox: an executable that uses the engine the way a game would. It starts the Lane Runner
+# game (M12); with --demo it shows the engine's demo scene instead.
 add_executable(Sandbox
     src/DebugWindows.cpp
     src/DemoScene.cpp
     src/FlyCamera.cpp
+    src/FollowCamera.cpp
+    src/LaneRunner.cpp
+    src/LaneRunnerScene.cpp
     src/Main.cpp
-    src/Spinner.cpp)
+    src/Spinner.cpp
+    src/Treadmill.cpp
+    src/TruckController.cpp
+    src/TruckWheels.cpp)
 
 # Linking VivaEngine also brings in everything the engine declared PUBLIC: its include/
 # folder, C++20, GLM, Dear ImGui's imgui.h and the VIVA_DEBUG define. SDL3 and Vulkan get linked

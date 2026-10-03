@@ -3,6 +3,7 @@
 #include "Viva/MeshData.h"
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
 #include <cstdint>
@@ -85,6 +86,9 @@ public:
     // Where the frame is seen from: a view matrix and a projection matrix (see Viva/Camera.h).
     // The scene sets them every frame from its main camera. They stay until set again.
     void SetCamera(const glm::mat4& view, const glm::mat4& projection);
+    // The color each frame starts from, which shows wherever nothing is drawn: a linear color.
+    // The scene sets it every frame from its main camera's BackgroundColor. Black until then.
+    void SetClearColor(const glm::vec3& color);
     // The width of the image being drawn divided by its height: a camera's projection needs it.
     float GetAspectRatio() const;
 

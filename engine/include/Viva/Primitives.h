@@ -12,8 +12,9 @@ namespace Viva::Primitives {
 // stored once per face because each face gives it different texture coordinates.
 MeshData Cube();
 
-// A flat square on the ground (y = 0), size x size units, centered on the origin and facing up.
-// The texture repeats `textureRepeats` times along each side.
-MeshData Plane(float size, float textureRepeats = 1.0f);
+// A flat rectangle on the ground (y = 0): `width` units along X by `length` along Z, centered on
+// the origin and facing up. The texture repeats textureRepeats.x times across (along X) and
+// textureRepeats.y times along Z.
+MeshData Plane(float width, float length, const glm::vec2& textureRepeats = glm::vec2(1.0f));
 
 } // namespace Viva::Primitives

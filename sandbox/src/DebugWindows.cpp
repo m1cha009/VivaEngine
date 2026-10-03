@@ -6,6 +6,7 @@
 
 #include "FlyCamera.h"
 #include "Spinner.h"
+#include "TruckWheels.h"
 
 #include "Viva/Camera.h"
 #include "Viva/Input.h"
@@ -19,7 +20,6 @@
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
 
-#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -123,8 +123,7 @@ void DebugWindows::DrawSceneWindow(Scene& scene)
 
         // A selected object that's no longer in the scene was destroyed: forget it, before the
         // pointer is used.
-        const auto isSelected = [this](const std::unique_ptr<GameObject>& gameObject) { return gameObject.get() == m_Selected; };
-        if (m_Selected && std::ranges::none_of(gameObjects, isSelected))
+        if (m_Selected && !scene.Contains(m_Selected))
             m_Selected = nullptr;
 
         // The tree starts at the root objects, those without a parent. Each node draws its own
@@ -224,6 +223,10 @@ void DebugWindows::DrawInspector(GameObject& gameObject)
     if (Spinner* spinner = gameObject.GetComponent<Spinner>()) {
         ImGui::SeparatorText("Spinner");
         ImGui::DragFloat("Speed", &spinner->DegreesPerSecond, 1.0f, 0.0f, 0.0f, "%.0f deg/s");
+    }
+    if (TruckWheels* wheels = gameObject.GetComponent<TruckWheels>()) {
+        ImGui::SeparatorText("Truck Wheels");
+        ImGui::DragFloat("Speed##wheels", &wheels->Speed, 0.1f, 0.0f, 0.0f, "%.1f m/s");
     }
     if (const MeshRenderer* meshRenderer = gameObject.GetComponent<MeshRenderer>()) {
         ImGui::SeparatorText("Mesh Renderer");

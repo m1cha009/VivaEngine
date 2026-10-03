@@ -4,6 +4,7 @@
 
 #include <glm/mat4x4.hpp>
 #include <glm/trigonometric.hpp>
+#include <glm/vec3.hpp>
 
 namespace Viva {
 
@@ -20,6 +21,9 @@ public:
     // Only what lies between these distances is drawn (Unity's clipping planes).
     float NearPlane = 0.1f;
     float FarPlane = 500.0f;
+    // What the picture shows where nothing is drawn: the sky (Unity's backgroundColor). A linear
+    // color, like a material's: the sRGB swapchain brightens it on the way to the screen.
+    glm::vec3 BackgroundColor { 0.02f, 0.025f, 0.04f };
 
     // The view matrix moves and turns the world so the camera sits at the origin, looking down -Z,
     // the direction OpenGL-style projections expect (Unity's worldToCameraMatrix).

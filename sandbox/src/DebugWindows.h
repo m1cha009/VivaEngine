@@ -25,6 +25,9 @@ public:
     // Builds this frame's windows. Call it every frame from OnUpdate.
     void Draw(float dt, Viva::Renderer& renderer, Viva::Scene& scene);
 
+    // Shown or hidden, as F1 toggles them. They start shown.
+    void SetVisible(bool visible) { m_Visible = visible; }
+
 private:
     void RecordFrameTime(float dt);
     void DrawStatsWindow(Viva::Renderer& renderer);

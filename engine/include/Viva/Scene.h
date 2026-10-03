@@ -31,6 +31,12 @@ public:
     // that: the game must forget them.
     void Destroy(GameObject& gameObject);
 
+    // Whether a GameObject is still in this scene. A destroyed one leaves at the end of the frame
+    // it was destroyed in. Only the pointer is compared, so it's safe to ask about an object that's
+    // gone: it's how code that keeps pointers to objects others may destroy (the debug windows'
+    // Destroy button) can tell, like Unity's "== null" check on a destroyed object.
+    bool Contains(const GameObject* gameObject) const;
+
     // The camera the frame is drawn from: the Camera of the first active GameObject that has one
     // (Unity's Camera.main). Without a camera, nothing in the scene is drawn.
     Camera* GetMainCamera() const;

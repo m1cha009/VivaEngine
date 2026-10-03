@@ -35,10 +35,6 @@ namespace Viva {
 
 namespace {
 
-// The background: a dark blue-grey, as a linear color (the sRGB swapchain brightens it on the way
-// to the screen).
-constexpr VkClearColorValue kClearColor { { 0.02f, 0.025f, 0.04f, 1.0f } };
-
 // The per-draw data, pushed with vkCmdPushConstants right before each draw, laid out like
 // "push_constant uniform Object" in the shaders: the object's model matrix, then its material's
 // color. Push constants are the quickest way to hand a draw a little data; every GPU takes at
@@ -87,6 +83,7 @@ public:
     void SetVSync(bool enabled);
     bool IsVSync() const { return m_VSync; }
     void SetCamera(const glm::mat4& view, const glm::mat4& projection);
+    void SetClearColor(const glm::vec3& color) { m_ClearColor = color; }
     float GetAspectRatio() const;
     bool BeginFrame();
     void EndFrame();
@@ -146,6 +143,7 @@ private:
 
     std::vector<DrawCommand> m_DrawList; // this frame's Submits
     CameraUniforms m_Camera {};          // from SetCamera
+    glm::vec3 m_ClearColor { 0.0f };     // from SetClearColor
     RenderStats m_Stats;                 // about the last frame drawn
     int m_LiveResources = 0;             // handed to the game and not released yet
     bool m_DestroyNow = false;           // shutting down: release means destroy
@@ -180,6 +178,7 @@ const RenderStats& Renderer::GetStats() const { return m_Impl->GetStats(); }
 void Renderer::SetVSync(bool enabled) { m_Impl->SetVSync(enabled); }
 bool Renderer::IsVSync() const { return m_Impl->IsVSync(); }
 void Renderer::SetCamera(const glm::mat4& view, const glm::mat4& projection) { m_Impl->SetCamera(view, projection); }
+void Renderer::SetClearColor(const glm::vec3& color) { m_Impl->SetClearColor(color); }
 float Renderer::GetAspectRatio() const { return m_Impl->GetAspectRatio(); }
 bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
 void Renderer::EndFrame() { m_Impl->EndFrame(); }
@@ -517,7 +516,7 @@ void Renderer::Impl::EndFrame()
     });
 
     // Dynamic rendering: draw straight into the image views. The color image is cleared to the
-    // background and kept for presenting (STORE). The depth buffer is cleared to 1.0, the far
+    // background (the camera's color) and kept for presenting (STORE). The depth buffer is cleared to 1.0, the far
     // plane, so anything drawn is nearer; it isn't needed after the frame, so DONT_CARE lets the
     // GPU skip writing it back to memory.
     const VkRenderingAttachmentInfo colorAttachment {
@@ -526,7 +525,7 @@ void Renderer::Impl::EndFrame()
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = { .color = kClearColor },
+        .clearValue = { .color = { { m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, 1.0f } } },
     };
     const VkRenderingAttachmentInfo depthAttachment {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,

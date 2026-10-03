@@ -102,7 +102,8 @@ jobs:
 
       - name: Run Sandbox
         timeout-minutes: 2 # --quit-after counts game time; this is the hard limit if the app hangs
-        # The Sandbox opens a window, so --quit-after makes it end on its own after two seconds.
+        # The Sandbox opens a window, so --quit-after makes it end on its own after two seconds. It
+        # runs twice per build: the game, and the demo scene (--demo).
         # The first lines of its output also become a notice on the run's summary page (and in
         # the public API), which shows what macOS reported without opening the full log.
         # Its warning and error lines become a warning annotation, and an error fails the check:
@@ -111,26 +112,32 @@ jobs:
         # GPU found": that's reported as a warning, since only the startup before it could be tested.
         run: |
           for config in debug release; do
-            set +e
-            ./build/macos-${config}/bin/Sandbox --quit-after 2 > "run-${config}.log" 2>&1
-            code=$?
-            set -e
-            cat "run-${config}.log"
-            echo "::notice title=Sandbox ${config}::$(head -n 12 "run-${config}.log" | tr '\n' ' ')"
-            if [ "${code}" -ne 0 ]; then
-              if grep -q "No suitable GPU found" "run-${config}.log"; then
-                echo "::warning title=Sandbox ${config}::No suitable Vulkan GPU on this runner; rendering was not tested"
-                continue
+            for mode in game demo; do
+              name="${config} ${mode}"
+              log="run-${config}-${mode}.log"
+              args="--quit-after 2"
+              if [ "${mode}" = demo ]; then args="${args} --demo"; fi
+              set +e
+              ./build/macos-${config}/bin/Sandbox ${args} > "${log}" 2>&1
+              code=$?
+              set -e
+              cat "${log}"
+              echo "::notice title=Sandbox ${name}::$(head -n 12 "${log}" | tr '\n' ' ')"
+              if [ "${code}" -ne 0 ]; then
+                if grep -q "No suitable GPU found" "${log}"; then
+                  echo "::warning title=Sandbox ${config}::No suitable Vulkan GPU on this runner; rendering was not tested"
+                  continue 2 # the other mode would fail the same way
+                fi
+                exit "${code}"
               fi
-              exit "${code}"
-            fi
-            if grep -E "\[(Warn |Error)\]" "run-${config}.log" > "problems-${config}.log"; then
-              echo "::warning title=Sandbox ${config} warnings and errors::$(head -n 20 "problems-${config}.log" | tr '\n' ' ')"
-              if grep -q "\[Error\]" "problems-${config}.log"; then
-                echo "::error::Sandbox ${config} logged errors (listed above)"
-                exit 1
+              if grep -E "\[(Warn |Error)\]" "${log}" > "problems-${config}-${mode}.log"; then
+                echo "::warning title=Sandbox ${name} warnings and errors::$(head -n 20 "problems-${config}-${mode}.log" | tr '\n' ' ')"
+                if grep -q "\[Error\]" "problems-${config}-${mode}.log"; then
+                  echo "::error::Sandbox ${name} logged errors (listed above)"
+                  exit 1
+                fi
               fi
-            fi
+            done
           done
 
       - name: Check VIVA_ASSERT

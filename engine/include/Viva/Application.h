@@ -64,8 +64,8 @@ protected:
     // place to build the scene. Like Start().
     virtual void OnStart() {}
     // Called once per frame, with the frame's duration in seconds, after the scene's components
-    // have updated (so it sees where everything ended up, like Unity's LateUpdate). Also the place
-    // for Dear ImGui debug windows (include <imgui.h>), like OnGUI().
+    // have updated (their OnUpdate, then their OnLateUpdate), so it sees where everything ended up.
+    // Also the place for Dear ImGui debug windows (include <imgui.h>), like OnGUI().
     virtual void OnUpdate(float /*dt*/) {}
     // Called at a fixed rate, 50 times per second by default, no matter the frame rate: zero,
     // one or several times per frame, after the components' OnFixedUpdate. Like FixedUpdate().

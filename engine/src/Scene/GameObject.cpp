@@ -55,6 +55,11 @@ void GameObject::UpdateComponents(float dt)
     ForEachStartedComponent([dt](Component& component) { component.OnUpdate(dt); });
 }
 
+void GameObject::LateUpdateComponents(float dt)
+{
+    ForEachStartedComponent([dt](Component& component) { component.OnLateUpdate(dt); });
+}
+
 void GameObject::FixedUpdateComponents(float fixedDt)
 {
     ForEachStartedComponent([fixedDt](Component& component) { component.OnFixedUpdate(fixedDt); });

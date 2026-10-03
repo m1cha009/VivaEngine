@@ -52,6 +52,13 @@ public:
     glm::vec3 Forward() const;
     glm::vec3 Right() const;
     glm::vec3 Up() const;
+    // The rotation in world space (Unity's rotation): the parent's, then this one's own.
+    glm::quat GetRotation() const;
+
+    // Turns the object so its Forward points at `worldPoint`, with its Up as close to `worldUp`
+    // as that allows: Unity's transform.LookAt. Looking straight along `worldUp` (or at its own
+    // position) has no single answer, so then nothing changes.
+    void LookAt(const glm::vec3& worldPoint, const glm::vec3& worldUp = glm::vec3(0.0f, 1.0f, 0.0f));
 
     // The hierarchy. A child moves, turns and scales with its parent. SetParent keeps the local
     // values, so the object jumps to the same place relative to its new parent: that's Unity's

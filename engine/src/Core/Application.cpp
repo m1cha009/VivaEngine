@@ -110,8 +110,8 @@ int Application::Run()
             fixedTimeAccumulator -= fixedDt;
         }
 
-        // The scene's components update first (their OnStart, the first time), then the game's
-        // own OnUpdate, which also builds its debug windows.
+        // The scene's components update first (OnStart the first time, then OnUpdate, then
+        // OnLateUpdate), then the game's own OnUpdate, which also builds its debug windows.
         Time::SetDeltaTime(dt);
         m_Scene->Update(dt);
         OnUpdate(dt);

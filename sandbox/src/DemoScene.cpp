@@ -2,6 +2,7 @@
 
 #include "FlyCamera.h"
 #include "Spinner.h"
+#include "TruckWheels.h"
 
 #include "Viva/Camera.h"
 #include "Viva/MeshRenderer.h"
@@ -27,8 +28,6 @@ constexpr float kPillarHeight = 3.0f;
 // The milk truck drives in a circle around the pillars, in meters and seconds.
 constexpr float kTruckSpeed = 3.0f;
 constexpr float kTruckCircleRadius = 9.5f;
-// The model's wheels are 0.86 m across (see the wheel mesh's size in the file).
-constexpr float kWheelRadius = 0.43f;
 
 // A cube whose six faces have their own colors: the built-in cube, with its vertex colors
 // changed. Its faces come in the order +X, -X, +Y, -Y, +Z, -Z, four vertices each.
@@ -59,7 +58,7 @@ void LoadDemoScene(Scene& scene, Renderer& renderer)
     const std::shared_ptr<Mesh> pillarMesh = renderer.CreateMesh(ColoredCube());
     // 28 x 28 units, with the checker texture (2x2 squares) repeated 14 times along each side:
     // one square per unit.
-    const std::shared_ptr<Mesh> floorMesh = renderer.CreateMesh(Primitives::Plane(28.0f, 14.0f));
+    const std::shared_ptr<Mesh> floorMesh = renderer.CreateMesh(Primitives::Plane(28.0f, 28.0f, glm::vec2(14.0f)));
     const std::shared_ptr<Material> crateMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") });
     const std::shared_ptr<Material> floorMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/checker.png") });
     const std::shared_ptr<Material> pillarMaterial = renderer.CreateMaterial({});
@@ -128,18 +127,9 @@ void LoadDemoScene(Scene& scene, Renderer& renderer)
         milkTruck.GetTransform().LocalPosition = { kTruckCircleRadius, 0.0f, 0.0f };
         milkTruck.GetTransform().LocalRotation = glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f));
 
-        // The file animates the wheels, but the engine doesn't play animations yet, so a Spinner
-        // turns them instead, found by name in the model's hierarchy. For the wheels to roll
-        // rather than slide, they turn kTruckSpeed / kWheelRadius radians per second. Their axle
-        // is Y in the file's own axes (the file's "Yup2Zup" node turns those so that its Z points
-        // up), and rolling forward turns them the negative way around it.
-        constexpr const char* kAxles[] = { "Yup2Zup/Cesium_Milk_Truck/Node/Wheels",
-                                            "Yup2Zup/Cesium_Milk_Truck/Node.001/Wheels.001" };
-        for (const char* axle : kAxles) {
-            if (Transform* wheels = milkTruck.GetTransform().Find(axle))
-                wheels->GetGameObject().AddComponent<Spinner>(glm::vec3(0.0f, -1.0f, 0.0f),
-                                                              glm::degrees(kTruckSpeed / kWheelRadius));
-        }
+        // The file animates the wheels, but the engine doesn't play animations yet. TruckWheels
+        // turns them instead, at the speed the truck drives, so they roll rather than slide.
+        milkTruck.AddComponent<TruckWheels>().Speed = kTruckSpeed;
     }
 
     // The camera: above the floor and back from the middle (at +Z), outside the truck's circle,

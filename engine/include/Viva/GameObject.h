@@ -55,6 +55,7 @@ private:
     friend class Scene;
     void StartComponents();
     void UpdateComponents(float dt);
+    void LateUpdateComponents(float dt);
     void FixedUpdateComponents(float fixedDt);
     template <typename Callback>
     void ForEachStartedComponent(Callback callback);

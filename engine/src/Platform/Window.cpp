@@ -101,6 +101,12 @@ std::unique_ptr<Window> Window::Create(const std::string& title, uint32_t width,
         style.FontScaleDpi = contentScale;
     }
 
+    // The debug UI's font: ImGui's built-in one, which comes pixel-sharp or scalable depending on
+    // the size the scaling above asks for. ImGui would add it by itself before the first frame,
+    // but only if no font exists yet, and the first font is the default. Adding it here keeps it
+    // the debug UI's font when a game adds its own, for a HUD.
+    ImGui::GetIO().Fonts->AddFontDefault();
+
     const Extent pixels = window->GetPixelSize();
     Log::Info("Window: {}x{} points, {}x{} pixels (display scale {:.2f}) on {}", width, height, pixels.Width,
               pixels.Height, SDL_GetWindowDisplayScale(sdlWindow), SDL_GetDisplayName(displayId));

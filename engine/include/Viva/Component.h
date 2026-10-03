@@ -40,10 +40,14 @@ protected:
     Component() = default;
 
     // Called by the scene for components whose GameObject is active, like their Unity namesakes:
-    // OnStart once, before the component's first update (Start); OnUpdate every frame (Update);
-    // OnFixedUpdate at the fixed rate, 50 times a second by default (FixedUpdate).
+    //   OnStart       once, before the component's first update (Start);
+    //   OnUpdate      every frame (Update);
+    //   OnLateUpdate  every frame too, once every component's OnUpdate has run (LateUpdate): the
+    //                 place for cameras and anything else that follows what others moved;
+    //   OnFixedUpdate at the fixed rate, 50 times a second by default (FixedUpdate).
     virtual void OnStart() {}
     virtual void OnUpdate(float /*dt*/) {}
+    virtual void OnLateUpdate(float /*dt*/) {}
     virtual void OnFixedUpdate(float /*fixedDt*/) {}
 
 private:
