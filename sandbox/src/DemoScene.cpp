@@ -1,12 +1,19 @@
 #include "DemoScene.h"
 
-#include "Viva/Primitives.h"
+#include "FlyCamera.h"
+#include "Spinner.h"
 
-#include <glm/geometric.hpp>
+#include "Viva/Camera.h"
+#include "Viva/MeshRenderer.h"
+#include "Viva/Primitives.h"
+#include "Viva/Renderer.h"
+#include "Viva/Scene.h"
+
 #include <glm/gtc/constants.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <cmath>
+#include <format>
 
 using namespace Viva;
 
@@ -32,52 +39,65 @@ MeshData ColoredCube()
     return cube;
 }
 
-// Model matrices place a mesh in the world. They're built here as translate * rotate * scale,
-// which applies to the mesh right to left: scale it, then turn it, then move it into place, just
-// like a Unity Transform's scale, rotation and position.
-
-// The crate in the middle: hovering above the floor and turning around a tilted axis.
-glm::mat4 SpinningCubeTransform(float seconds)
-{
-    glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
-    model = glm::rotate(model, 0.8f * seconds, glm::normalize(glm::vec3(0.4f, 1.0f, 0.2f)));
-    return glm::scale(model, glm::vec3(1.2f));
-}
-
-// Pillar i, standing in a ring around the middle: a cube stretched tall. The ring is turned by
-// half a step, so no pillar stands between the starting camera and the crate.
-glm::mat4 PillarTransform(int i)
-{
-    const float angle = glm::two_pi<float>() * (static_cast<float>(i) + 0.5f) / static_cast<float>(kPillarCount);
-    constexpr float kRadius = 6.0f;
-    constexpr float kHeight = 3.0f;
-    const glm::mat4 model = glm::translate(glm::mat4(1.0f),
-                                           glm::vec3(kRadius * std::cos(angle), kHeight / 2.0f, kRadius * std::sin(angle)));
-    return glm::scale(model, glm::vec3(0.6f, kHeight, 0.6f));
-}
-
 } // namespace
 
-void DemoScene::Load(Renderer& renderer)
+void LoadDemoScene(Scene& scene, Renderer& renderer)
 {
-    m_CubeMesh = renderer.CreateMesh(Primitives::Cube());
-    m_PillarMesh = renderer.CreateMesh(ColoredCube());
+    // Meshes and materials, as in M8. They're shared_ptrs, so several MeshRenderers can use one,
+    // and each lives as long as something uses it. If a texture fails to load (the log says why),
+    // LoadTexture returns null and that material is plain white.
+    const std::shared_ptr<Mesh> cubeMesh = renderer.CreateMesh(Primitives::Cube());
+    const std::shared_ptr<Mesh> pillarMesh = renderer.CreateMesh(ColoredCube());
     // 24 x 24 units, with the checker texture (2x2 squares) repeated 12 times along each side:
     // one square per unit.
-    m_FloorMesh = renderer.CreateMesh(Primitives::Plane(24.0f, 12.0f));
+    const std::shared_ptr<Mesh> floorMesh = renderer.CreateMesh(Primitives::Plane(24.0f, 12.0f));
+    const std::shared_ptr<Material> crateMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") });
+    const std::shared_ptr<Material> floorMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/checker.png") });
+    const std::shared_ptr<Material> pillarMaterial = renderer.CreateMaterial({});
 
-    // Materials without a shader use the engine's Unlit one. Without a texture they're plain
-    // white, so the pillars show only their vertex colors. If a texture fails to load (the log
-    // says why), LoadTexture returns null and that material is white too.
-    m_CrateMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") });
-    m_FloorMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/checker.png") });
-    m_PillarMaterial = renderer.CreateMaterial({});
-}
+    GameObject& floor = scene.CreateGameObject("Floor");
+    floor.AddComponent<MeshRenderer>(floorMesh, floorMaterial);
 
-void DemoScene::Draw(Renderer& renderer, float seconds) const
-{
-    renderer.Submit(m_FloorMesh, m_FloorMaterial, glm::mat4(1.0f)); // the identity: the floor as built
-    for (int i = 0; i < kPillarCount; ++i)
-        renderer.Submit(m_PillarMesh, m_PillarMaterial, PillarTransform(i));
-    renderer.Submit(m_CubeMesh, m_CrateMaterial, SpinningCubeTransform(seconds));
+    // The pillars are children of one object that turns slowly: they ride along, each keeping its
+    // place in the ring, without any code of their own. The ring starts turned by half a step, so
+    // no pillar stands between the starting camera and the crate.
+    GameObject& ring = scene.CreateGameObject("Pillar ring");
+    ring.AddComponent<Spinner>(glm::vec3(0.0f, 1.0f, 0.0f), 6.0f);
+    for (int i = 0; i < kPillarCount; ++i) {
+        const float angle = glm::two_pi<float>() * (static_cast<float>(i) + 0.5f) / static_cast<float>(kPillarCount);
+        constexpr float kRadius = 6.0f;
+        constexpr float kHeight = 3.0f;
+        // std::format builds the name like C#'s string interpolation: "Pillar 1", "Pillar 2"...
+        GameObject& pillar = scene.CreateGameObject(std::format("Pillar {}", i + 1), &ring);
+        Transform& transform = pillar.GetTransform();
+        transform.LocalPosition = { kRadius * std::cos(angle), kHeight / 2.0f, kRadius * std::sin(angle) };
+        transform.LocalScale = { 0.6f, kHeight, 0.6f }; // a cube stretched tall
+        pillar.AddComponent<MeshRenderer>(pillarMesh, pillarMaterial);
+    }
+
+    // The crate in the middle: hovering above the floor and turning around a tilted axis.
+    GameObject& crate = scene.CreateGameObject("Crate");
+    crate.GetTransform().LocalPosition = { 0.0f, 1.5f, 0.0f };
+    crate.GetTransform().LocalScale = glm::vec3(1.2f);
+    crate.AddComponent<MeshRenderer>(cubeMesh, crateMaterial);
+    crate.AddComponent<Spinner>(glm::vec3(0.4f, 1.0f, 0.2f), 46.0f);
+
+    // A small crate, a child of the big one: it orbits as the big crate turns, and the big crate's
+    // scale applies to it too. Its position and size are in the big crate's space, so 1.5 units
+    // from the center are 1.8 in the world (1.5 x 1.2). It also spins on its own.
+    GameObject& smallCrate = scene.CreateGameObject("Small crate", &crate);
+    smallCrate.GetTransform().LocalPosition = { 1.5f, 0.0f, 0.0f };
+    smallCrate.GetTransform().LocalScale = glm::vec3(0.3f);
+    smallCrate.AddComponent<MeshRenderer>(cubeMesh, crateMaterial);
+    smallCrate.AddComponent<Spinner>(glm::vec3(0.0f, 1.0f, 0.0f), 180.0f);
+
+    // The camera: a little above the floor and back from the middle (at +Z), looking at it. Read
+    // right to left: tilted 12 degrees down (a positive turn around X tips the front down, as in
+    // Unity), then turned around (180 degrees around Y) to face -Z, towards the middle.
+    GameObject& camera = scene.CreateGameObject("Camera");
+    camera.GetTransform().LocalPosition = { 0.0f, 3.0f, 9.0f };
+    camera.GetTransform().LocalRotation = glm::angleAxis(glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                                          glm::angleAxis(glm::radians(12.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    camera.AddComponent<Camera>();
+    camera.AddComponent<FlyCamera>();
 }

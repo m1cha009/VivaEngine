@@ -123,7 +123,7 @@ It costs nothing, because the repository is public and the workflow uses a stand
 
 | Folder | Contents |
 |---|---|
-| `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code) and `Renderer/` (the only place for Vulkan). |
+| `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code), `Renderer/` (the only place for Vulkan) and `Scene/` (GameObjects, components, transforms). |
 | `sandbox/` | The `Sandbox` executable, a test app that uses the engine the way a game would |
 | `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation, asset copying |
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |

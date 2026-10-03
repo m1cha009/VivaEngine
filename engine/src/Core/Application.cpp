@@ -6,6 +6,7 @@
 #include "Renderer/VulkanVersion.h"
 #include "Viva/Log.h"
 #include "Viva/Renderer.h"
+#include "Viva/Scene.h"
 #include "Viva/Time.h"
 #include "Viva/Version.h"
 
@@ -36,9 +37,9 @@ Application::Application(ApplicationSettings settings)
 // Window and Renderer, which only this file includes.
 //
 // This is where the renderer and the window are destroyed: members go in reverse order of
-// declaration, the renderer (all of Vulkan) first, then the window and SDL. It runs after the
-// game's own destructor, so the GPU resources a game keeps in its members (shared_ptrs to meshes,
-// materials...) have already been released when the renderer shuts down.
+// declaration, the renderer (all of Vulkan) first, then the window and SDL. (The scene is gone
+// already: Run destroys it last thing.) It runs after the game's own destructor, so the GPU
+// resources a game keeps in its own members have been released by then too.
 Application::~Application() = default;
 
 int Application::Run()
@@ -54,6 +55,7 @@ int Application::Run()
     if (!m_Renderer)
         return EXIT_FAILURE;
 
+    m_Scene = std::make_unique<Scene>();
     OnStart();
 
     using Clock = std::chrono::steady_clock;
@@ -103,12 +105,20 @@ int Application::Run()
         const float fixedDt = Time::FixedDeltaTime();
         while (fixedTimeAccumulator >= fixedDt) {
             Time::SetDeltaTime(fixedDt); // as in Unity, DeltaTime() inside OnFixedUpdate is the fixed step
+            m_Scene->FixedUpdate(fixedDt);
             OnFixedUpdate(fixedDt);
             fixedTimeAccumulator -= fixedDt;
         }
 
+        // The scene's components update first (their OnStart, the first time), then the game's
+        // own OnUpdate, which also builds its debug windows.
         Time::SetDeltaTime(dt);
-        OnUpdate(dt); // the game updates, submits what to draw and builds its debug windows
+        m_Scene->Update(dt);
+        OnUpdate(dt);
+
+        // The scene removes what was destroyed this frame, then hands the renderer its main
+        // camera and everything visible.
+        m_Scene->Render(*m_Renderer);
 
         // The UI is complete: ImGui turns this frame's windows into lists of triangles, which
         // EndFrame draws over the scene.
@@ -117,7 +127,7 @@ int Application::Run()
         // Last, like in Unity: draw the frame the game just updated. Once BeginFrame succeeded,
         // EndFrame must follow, even when quitting: it submits the work that signals the frame's
         // fence.
-        m_Renderer->EndFrame(m_Camera);
+        m_Renderer->EndFrame();
 
         // The game has seen this frame's input: clear the "pressed/released this frame" flags and
         // the mouse movement before collecting the next frame's.
@@ -125,6 +135,10 @@ int Application::Run()
     }
 
     OnShutdown();
+
+    // The scene goes now, while the game object (this) and the renderer still exist, so its
+    // components' destructors can still use both.
+    m_Scene.reset();
     return EXIT_SUCCESS;
 }
 

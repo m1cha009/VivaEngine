@@ -18,7 +18,6 @@
 #include "Renderer/VulkanContext.h"
 #include "Renderer/VulkanHelpers.h"
 #include "Viva/Assert.h"
-#include "Viva/Camera.h"
 #include "Viva/Log.h"
 
 #include <algorithm>
@@ -84,8 +83,10 @@ public:
     const RenderStats& GetStats() const { return m_Stats; }
     void SetVSync(bool enabled);
     bool IsVSync() const { return m_VSync; }
+    void SetCamera(const glm::mat4& view, const glm::mat4& projection);
+    float GetAspectRatio() const;
     bool BeginFrame();
-    void EndFrame(const Camera& camera);
+    void EndFrame();
 
 private:
     std::shared_ptr<Shader> LoadShader(const std::string& name);
@@ -141,6 +142,7 @@ private:
     std::unordered_map<std::string, std::weak_ptr<Texture>> m_TextureCache;
 
     std::vector<DrawCommand> m_DrawList; // this frame's Submits
+    CameraUniforms m_Camera {};          // from SetCamera
     RenderStats m_Stats;                 // about the last frame drawn
     int m_LiveResources = 0;             // handed to the game and not released yet
     bool m_DestroyNow = false;           // shutting down: release means destroy
@@ -173,8 +175,10 @@ std::shared_ptr<Material> Renderer::CreateMaterial(const MaterialSettings& setti
 const RenderStats& Renderer::GetStats() const { return m_Impl->GetStats(); }
 void Renderer::SetVSync(bool enabled) { m_Impl->SetVSync(enabled); }
 bool Renderer::IsVSync() const { return m_Impl->IsVSync(); }
+void Renderer::SetCamera(const glm::mat4& view, const glm::mat4& projection) { m_Impl->SetCamera(view, projection); }
+float Renderer::GetAspectRatio() const { return m_Impl->GetAspectRatio(); }
 bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
-void Renderer::EndFrame(const Camera& camera) { m_Impl->EndFrame(camera); }
+void Renderer::EndFrame() { m_Impl->EndFrame(); }
 
 void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                       const glm::mat4& transform)
@@ -325,6 +329,19 @@ void Renderer::Impl::Submit(const Mesh& mesh, const Material& material, const gl
     m_DrawList.push_back({ .Shader = &material.GetShader(), .Material = &material, .Mesh = &mesh, .Transform = transform });
 }
 
+void Renderer::Impl::SetCamera(const glm::mat4& view, const glm::mat4& projection)
+{
+    m_Camera = { .View = view, .Projection = projection };
+}
+
+float Renderer::Impl::GetAspectRatio() const
+{
+    // The swapchain's size, which BeginFrame keeps in step with the window. Using it, rather than
+    // the window's, means the picture never stretches while the window is being resized.
+    const VkExtent2D extent = m_Swapchain->GetExtent();
+    return static_cast<float>(extent.width) / static_cast<float>(extent.height);
+}
+
 void Renderer::Impl::SetVSync(bool enabled)
 {
     // The present mode is picked when the swapchain is built (FIFO for vsync, see Swapchain.cpp),
@@ -424,22 +441,19 @@ bool Renderer::Impl::BeginFrame()
     return true;
 }
 
-void Renderer::Impl::EndFrame(const Camera& camera)
+void Renderer::Impl::EndFrame()
 {
     VIVA_ASSERT(m_FrameOpen, "EndFrame without a successful BeginFrame");
     VkDevice device = m_Context->GetDevice();
     FrameData& frame = m_Frames->GetFrame(m_FrameIndex);
 
     // 3. Fill this frame's uniform buffer with the camera (BeginFrame's fence wait made it free).
-    //    The aspect ratio comes from the swapchain, so the picture never stretches when the window
-    //    is resized. The projection follows OpenGL's convention, where clip space y points up;
-    //    Vulkan's points down, so flipping the y scale keeps +Y up on screen. (Unity does the same
-    //    in GL.GetGPUProjectionMatrix.)
-    const VkExtent2D extent = m_Swapchain->GetExtent();
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    glm::mat4 projection = camera.ProjectionMatrix(aspect);
-    projection[1][1] *= -1.0f;
-    m_Uniforms->Write(m_FrameIndex, { .View = camera.ViewMatrix(), .Projection = projection });
+    //    The projection follows OpenGL's convention, where clip space y points up; Vulkan's points
+    //    down, so flipping the y scale keeps +Y up on screen. (Unity does the same in
+    //    GL.GetGPUProjectionMatrix.)
+    CameraUniforms camera = m_Camera;
+    camera.Projection[1][1] *= -1.0f;
+    m_Uniforms->Write(m_FrameIndex, camera);
 
     // 4. Record this frame's commands: make the images drawable, clear them and draw, make the
     //    color image presentable.
@@ -452,6 +466,7 @@ void Renderer::Impl::EndFrame(const Camera& camera)
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
     const VkImage image = m_Swapchain->GetImage(m_ImageIndex);
+    const VkExtent2D extent = m_Swapchain->GetExtent();
 
     // The old contents don't matter (we're about to clear), so the old layout is UNDEFINED. The
     // source stage is the one the "image acquired" semaphore wait applies to (see the submit), so

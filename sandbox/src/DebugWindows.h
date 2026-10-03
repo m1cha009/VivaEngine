@@ -1,19 +1,17 @@
 #pragma once
 
-#include "Viva/Camera.h"
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 
 namespace Viva {
+class GameObject;
 class Renderer;
+class Scene;
 }
-class FlyCamera;
 
-// The sandbox's debug UI, made with Dear ImGui: a Stats window and a Camera window. F1 shows and
-// hides them.
+// The sandbox's debug UI, made with Dear ImGui: a Stats window, and a Scene window with the
+// hierarchy and an inspector, like Unity's. F1 shows and hides them.
 //
 // ImGui is an "immediate mode" UI: nothing is kept between frames. Every frame, Draw describes the
 // windows from scratch, reading values straight from the game, and a widget the user changes
@@ -25,12 +23,14 @@ public:
     void CountFixedUpdate() { ++m_FixedUpdatesThisSecond; }
 
     // Builds this frame's windows. Call it every frame from OnUpdate.
-    void Draw(float dt, Viva::Renderer& renderer, Viva::Camera& camera, FlyCamera& flyCamera);
+    void Draw(float dt, Viva::Renderer& renderer, Viva::Scene& scene);
 
 private:
     void RecordFrameTime(float dt);
     void DrawStatsWindow(Viva::Renderer& renderer);
-    void DrawCameraWindow(Viva::Camera& camera, FlyCamera& flyCamera);
+    void DrawSceneWindow(Viva::Scene& scene);
+    void DrawHierarchyNode(Viva::GameObject& gameObject);
+    void DrawInspector(Viva::GameObject& gameObject);
 
     // The latest frame times in milliseconds, for the graph: a ring buffer, in which
     // m_NextFrameTime is the oldest entry and the next one to be overwritten.
@@ -44,8 +44,9 @@ private:
     float m_FramesPerSecond = 0.0f;
     uint32_t m_FixedUpdatesPerSecond = 0;
 
-    // The camera as it was on the first frame, for the Reset button.
-    std::optional<Viva::Camera> m_StartCamera;
+    // The GameObject picked in the hierarchy, or nullptr. Only a pointer: the scene owns the
+    // object, so the Scene window checks it's still there before using it.
+    Viva::GameObject* m_Selected = nullptr;
 
     bool m_Visible = true;
     bool m_ShowDemoWindow = false;

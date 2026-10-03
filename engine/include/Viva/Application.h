@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Viva/Camera.h"
-
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -9,9 +7,10 @@
 namespace Viva {
 
 // Declared, not defined: a pointer or unique_ptr to a type only needs a declaration. The game
-// never sees Window's definition (it lives in src/Platform/); Renderer's is public, in
-// Viva/Renderer.h, for the games that draw.
+// never sees Window's definition (it lives in src/Platform/). Renderer's and Scene's are public, in
+// Viva/Renderer.h and Viva/Scene.h, for the games that use them.
 class Renderer;
+class Scene;
 class Window;
 
 // Settings for the application's window. C++20 lets you fill in just the fields you need:
@@ -58,13 +57,18 @@ protected:
     // replacement is marked with "override" after the parameter list, not before the name.
     // The parameter names are commented out because these default versions don't use them.
 
-    // Called once, after the window exists and before the first frame. Like Start().
+    // These work like a MonoBehaviour on a "game manager" object. Most game logic belongs in
+    // components on GameObjects (see Viva/Component.h); these are for what concerns the whole game.
+
+    // Called once, after the window and the empty scene exist and before the first frame: the
+    // place to build the scene. Like Start().
     virtual void OnStart() {}
-    // Called once per frame, with the frame's duration in seconds. Like Update(), and also the
-    // place for Dear ImGui debug windows (include <imgui.h>), like OnGUI().
+    // Called once per frame, with the frame's duration in seconds, after the scene's components
+    // have updated (so it sees where everything ended up, like Unity's LateUpdate). Also the place
+    // for Dear ImGui debug windows (include <imgui.h>), like OnGUI().
     virtual void OnUpdate(float /*dt*/) {}
     // Called at a fixed rate, 50 times per second by default, no matter the frame rate: zero,
-    // one or several times per frame. Like FixedUpdate().
+    // one or several times per frame, after the components' OnFixedUpdate. Like FixedUpdate().
     virtual void OnFixedUpdate(float /*fixedDt*/) {}
     // Called once after the loop ends, while the window still exists. Like OnDestroy().
     virtual void OnShutdown() {}
@@ -72,21 +76,24 @@ protected:
     // Changes the text in the window's title bar.
     void SetWindowTitle(const std::string& title);
 
-    // The camera the renderer draws from. Move it in OnUpdate.
-    Camera& GetCamera() { return m_Camera; }
-
-    // The renderer: create meshes, textures and materials with it (from OnStart on), and submit
-    // what to draw each frame (in OnUpdate). See Viva/Renderer.h.
+    // The renderer: create meshes, textures and materials with it (from OnStart on). See
+    // Viva/Renderer.h.
     Renderer& GetRenderer() { return *m_Renderer; }
+
+    // The scene: the GameObjects that make up the game world, from OnStart to OnShutdown. It's
+    // drawn from its main camera every frame (see Viva/Scene.h).
+    Scene& GetScene() { return *m_Scene; }
 
 private:
     ApplicationSettings m_Settings;
-    Camera m_Camera;
+    // Members are destroyed in reverse order of declaration: renderer, then window, because the
+    // renderer's Vulkan surface belongs to the window. Both live until the Application itself is
+    // destroyed, after the game's own members (see ~Application). The scene is destroyed at the
+    // end of Run, after OnShutdown, while the game and the renderer still exist; it's declared
+    // last in case Run returns early.
     std::unique_ptr<Window> m_Window;
-    // Declared after m_Window, so it's destroyed first: members are destroyed in reverse order,
-    // and the renderer's Vulkan surface belongs to the window. Both live until the Application
-    // itself is destroyed, after the game's own members (see ~Application).
     std::unique_ptr<Renderer> m_Renderer;
+    std::unique_ptr<Scene> m_Scene;
     bool m_QuitRequested = false;
 };
 

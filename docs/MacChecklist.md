@@ -156,3 +156,14 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       in that field (Cmd+C/V) use the system clipboard through SDL.
 - [ ] Unchecking VSync rebuilds the swapchain with MAILBOX or IMMEDIATE (whichever MoltenVK or
       KosmicKrisp offers), and the FPS rises above the display's refresh rate.
+
+## M10: Scene, GameObjects and components
+
+- [ ] **(CI)** The Sandbox runs with the scene built from GameObjects, and exits with code 0 (no
+      GPU resources outlive the renderer: the scene is destroyed first).
+- [ ] The scene looks and moves the same as on Windows: the pillar ring turns, the small crate
+      orbits the big one.
+- [ ] The Scene window works with the trackpad: open tree nodes with their arrows, select with a
+      click, and drag the inspector's values.
+- [ ] Destroying "Crate" and "Pillar ring" in the inspector removes them (and their children) with
+      no validation output. The Stats window's allocations drop as on Windows.

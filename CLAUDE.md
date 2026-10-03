@@ -81,7 +81,8 @@ VivaEngine/
 │   └── src/
 │       ├── Core/           # Application, Log, Assert, Time
 │       ├── Platform/       # Window, Input (SDL3 lives only here)
-│       └── Renderer/       # all Vulkan code
+│       ├── Renderer/       # all Vulkan code
+│       └── Scene/          # Scene, GameObject, Component, Transform, Camera (since M10)
 ├── sandbox/                # executable target: test app / game using the engine
 ├── shaders/                # GLSL sources
 ├── assets/
@@ -238,9 +239,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M10 (scene with Unity-style GameObjects) is next. Done: M0–M9 (M0–M8 on 2026-10-03, M9 on 2026-10-04).
-- **Verified on Windows:** M0–M9, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
-- **CI (macOS):** green through M8. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M11 (glTF model loading with cgltf) is next. Done: M0–M10 (M0–M8 on 2026-10-03, M9–M10 on 2026-10-04).
+- **Verified on Windows:** M0–M10, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
+- **CI (macOS):** green through M9. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -500,3 +501,42 @@ Append one line per decision: date, decision, reason.
     - **Linear-space blending of translucent UI** (patched for window and popup backgrounds only). Fix when a translucent HUD needs it (M12). Either draw the UI through a UNORM view of the swapchain image (`VK_KHR_swapchain_mutable_format`) in a second rendering pass, or render the scene into an offscreen image that's copied into a UNORM swapchain (the shape post-processing needs).
     - **Re-applying the UI scale** on `SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED`: keep an unscaled style copy, and use `SDL_GetWindowDisplayScale / SDL_GetWindowPixelDensity`.
     - **ImGui's font uploads** use the backend's own staging buffer and `vkQueueWaitIdle`. If a game shows lots of changing text, route `ImDrawData::Textures` through the engine's upload path.
+- 2026-10-04: M10 design:
+  - **Public API:** `Viva/Scene.h`, `GameObject.h`, `Component.h`, `Transform.h`, `MeshRenderer.h`. `Viva/Camera.h` became a Component. The code lives in a new `engine/src/Scene/` folder (`Camera.cpp` moved there from `Core/`).
+  - **Ownership:** `Application` owns a `std::unique_ptr<Scene>`, declared after the renderer so it's destroyed first. The scene holds `std::vector<std::unique_ptr<GameObject>>`. A GameObject holds its `Transform` as a member and `std::vector<std::unique_ptr<Component>>`. Parent/child and component→GameObject links are raw, non-owning pointers.
+  - **Components:**
+    - `Component` is a base class with protected virtual `OnStart`/`OnUpdate`/`OnFixedUpdate`, called by `GameObject` (a friend), which `Scene` drives (a friend of `GameObject`).
+    - `AddComponent<T>(args...)` uses `static_assert` + `make_unique` + perfect forwarding; constructor arguments are allowed, unlike Unity.
+    - `GetComponent<T>` is a linear `dynamic_cast` search.
+    - `OnStart` runs before a component's first (fixed) update, once its object is active.
+  - **Lifecycle:** the update loops are index-based, because callbacks may add objects or components. `SetActive` / `IsActiveInHierarchy` walk up the parents. `Destroy` marks the subtree; `Scene::Render` removes the marked objects (detaching them from surviving parents, then `std::erase_if`) before drawing.
+  - **Transform:**
+    - Public `LocalPosition`/`LocalRotation` (`glm::quat`)/`LocalScale` fields, and `LocalMatrix` = T·R·S.
+    - `WorldMatrix` = parent world × local, recomputed recursively on every call (no caching yet).
+    - **Michail's decision (asked during M10's review):** `Forward` = +Z for models and cameras (glTF's asset convention and Unity's meaning), `Up` = +Y, `Right` = −X (right-handed). This revises M6's "cameras look down −Z", which now holds only in view space.
+    - `SetParent` keeps the local values (Unity's `SetParent(p, false)`) and asserts against cycles.
+  - **Frame order:** scene `FixedUpdate`, game `OnFixedUpdate`; scene `Update`, game `OnUpdate` (LateUpdate-like); scene `Render` (remove destroyed objects, `Renderer::SetCamera` from the first active Camera, `Submit` every active MeshRenderer); `ImGui::Render`; `Renderer::EndFrame()`. With no camera, nothing in the scene is drawn.
+  - **Renderer:** `SetCamera(view, projection)` stores matrices; `GetAspectRatio()` comes from the swapchain. The renderer stays unaware of scenes and components.
+  - **Camera:** the view is `lookAt(position, position + forward, up)` from the camera's normalized world axes, so a parent's scale doesn't leak in.
+  - **Sandbox:**
+    - `FlyCamera` is a Component. It derives yaw/pitch from `Forward()` while looking and writes `LocalRotation` = `angleAxis(yaw, Y) · angleAxis(−pitch, X)`, so the Transform is the only state.
+    - `Spinner` pre-multiplies a per-frame `angleAxis` step and normalizes.
+    - `LoadDemoScene` builds the hierarchy.
+    - The DebugWindows Scene window has a hierarchy tree (object addresses as ImGui IDs; the selection is validated against the scene each frame) and an inspector with Active, Destroy, the Transform with Euler-angle rotation, and the known components.
+- 2026-10-04: M10 `/simplify` pass:
+  - **Destruction:**
+    - `~Transform` unlinks both ways, so any destruction order is safe.
+    - `RemoveDestroyed` re-marks the subtrees of destroyed objects; this fixes children added under a destroyed object in the same frame, which were left with a dangling parent. It then moves the destroyed objects into a local vector before they're destroyed, so a component destructor (our `OnDestroy`) can create or destroy objects safely. No "something was destroyed" flag.
+    - `Run` destroys the scene after `OnShutdown`, while the game and the renderer still exist.
+  - **Smaller cleanups:**
+    - Update and FixedUpdate share one loop (`ForEachStartedComponent` with a lambda).
+    - `kMaxPitch` is private to `FlyCamera.cpp`, and `SetParent`'s loop check uses the assert-then-return pattern.
+    - The renderer keeps one `CameraUniforms`.
+    - `glm::identity<glm::quat>()` replaces a hand-written (w, x, y, z).
+  - **Inspector:** the Euler angles use GLM's YXZ decomposition (Unity's order). Y gets the full ±180°; with GLM's `eulerAngles`, the demo's turns around Y flipped past 90°.
+  - **Efficiency review:** nothing to change at M11/M12 scale.
+    - World matrices are recomputed per object per frame. If the Stats window ever shows it, use one top-down pass.
+    - M12's spawner should reuse meshes and materials kept in game members: creating them blocks (M8).
+  - **Deferred to M11:**
+    - A glTF mesh has several primitives with their own materials, but only one MeshRenderer per GameObject is drawn. Either MeshRenderer gets a list of mesh+material parts (like Unity's submeshes + `materials[]`), or the loader makes a child object per primitive.
+    - `Transform::FindChild(name)` for named nodes such as the truck's wheels.

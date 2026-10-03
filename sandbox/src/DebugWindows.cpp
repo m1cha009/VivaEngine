@@ -1,13 +1,27 @@
+// GLM's "gtx" extensions are marked experimental (their API may still change), so GLM asks for
+// this define before one is included. Here it's for gtx/euler_angles.hpp, below.
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include "DebugWindows.h"
 
 #include "FlyCamera.h"
+#include "Spinner.h"
 
+#include "Viva/Camera.h"
 #include "Viva/Input.h"
 #include "Viva/Log.h"
+#include "Viva/MeshRenderer.h"
 #include "Viva/Renderer.h"
+#include "Viva/Scene.h"
 
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
+
+#include <algorithm>
+#include <memory>
+#include <vector>
 
 using namespace Viva;
 
@@ -20,11 +34,9 @@ float ToMegabytes(uint64_t bytes)
 
 } // namespace
 
-void DebugWindows::Draw(float dt, Renderer& renderer, Camera& camera, FlyCamera& flyCamera)
+void DebugWindows::Draw(float dt, Renderer& renderer, Scene& scene)
 {
     RecordFrameTime(dt);
-    if (!m_StartCamera)
-        m_StartCamera = camera;
 
     if (Input::GetKeyDown(Key::F1))
         m_Visible = !m_Visible;
@@ -32,7 +44,7 @@ void DebugWindows::Draw(float dt, Renderer& renderer, Camera& camera, FlyCamera&
         return;
 
     DrawStatsWindow(renderer);
-    DrawCameraWindow(camera, flyCamera);
+    DrawSceneWindow(scene);
     // ImGui's own demo: every widget it has, each with the code that makes it (imgui_demo.cpp).
     // The pointer to the bool gives the window a close button that sets it to false.
     if (m_ShowDemoWindow)
@@ -96,29 +108,125 @@ void DebugWindows::DrawStatsWindow(Renderer& renderer)
     ImGui::End();
 }
 
-void DebugWindows::DrawCameraWindow(Camera& camera, FlyCamera& flyCamera)
+void DebugWindows::DrawSceneWindow(Scene& scene)
 {
     // In the top-right corner: the pivot (1, 0) makes the position the window's top-right corner
-    // rather than its top-left.
+    // rather than its top-left. Its size is fixed, so opening the hierarchy can't grow it off the
+    // screen (it scrolls instead), and given in multiples of the font size, so it scales with it.
     const float right = ImGui::GetIO().DisplaySize.x - 10.0f;
+    const float fontSize = ImGui::GetFontSize();
     ImGui::SetNextWindowPos(ImVec2(right, 10.0f), ImGuiCond_FirstUseEver, ImVec2(1.0f, 0.0f));
-    if (ImGui::Begin("Camera", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        // These widgets write straight into the camera. DragFloat3 edits three floats in a row:
-        // a glm::vec3's x, y and z are laid out one after another, so &x is all it needs.
-        ImGui::DragFloat3("Position", &camera.Position.x, 0.05f);
+    ImGui::SetNextWindowSize(ImVec2(26.0f * fontSize, 34.0f * fontSize), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Scene")) {
+        const std::vector<std::unique_ptr<GameObject>>& gameObjects = scene.GetGameObjects();
+        ImGui::Text("%zu game objects", gameObjects.size());
 
-        // The angles are stored in radians, and SliderAngle shows and edits them in degrees.
-        ImGui::SliderAngle("Yaw", &camera.Yaw, -180.0f, 180.0f);
-        // AlwaysClamp also limits values typed in (Ctrl+click a slider to type).
-        const float maxPitch = glm::degrees(FlyCamera::kMaxPitch);
-        ImGui::SliderAngle("Pitch", &camera.Pitch, -maxPitch, maxPitch, "%.0f deg", ImGuiSliderFlags_AlwaysClamp);
-        ImGui::SliderAngle("Field of view", &camera.FieldOfView, 20.0f, 120.0f, "%.0f deg", ImGuiSliderFlags_AlwaysClamp);
+        // A selected object that's no longer in the scene was destroyed: forget it, before the
+        // pointer is used.
+        const auto isSelected = [this](const std::unique_ptr<GameObject>& gameObject) { return gameObject.get() == m_Selected; };
+        if (m_Selected && std::ranges::none_of(gameObjects, isSelected))
+            m_Selected = nullptr;
 
-        ImGui::SliderFloat("Fly speed", &flyCamera.MoveSpeed, 0.5f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+        // The tree starts at the root objects, those without a parent. Each node draws its own
+        // children below it.
+        ImGui::SeparatorText("Hierarchy");
+        for (const std::unique_ptr<GameObject>& gameObject : gameObjects) {
+            if (!gameObject->GetTransform().GetParent())
+                DrawHierarchyNode(*gameObject);
+        }
 
-        // A button returns true on the frame it's clicked: the immediate-mode way to handle a click.
-        if (ImGui::Button("Reset"))
-            camera = *m_StartCamera; // set by Draw on the first frame
+        ImGui::SeparatorText("Inspector");
+        if (m_Selected)
+            DrawInspector(*m_Selected);
+        else
+            ImGui::TextDisabled("Click an object in the hierarchy");
     }
     ImGui::End();
+}
+
+void DebugWindows::DrawHierarchyNode(GameObject& gameObject)
+{
+    const std::vector<Transform*>& children = gameObject.GetTransform().GetChildren();
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                               ImGuiTreeNodeFlags_SpanAvailWidth;
+    if (children.empty())
+        flags |= ImGuiTreeNodeFlags_Leaf; // no arrow
+    if (&gameObject == m_Selected)
+        flags |= ImGuiTreeNodeFlags_Selected;
+
+    // Inactive objects are grayed out, as in Unity. Push changes a style setting until the
+    // matching Pop.
+    const bool active = gameObject.IsActiveInHierarchy();
+    if (!active)
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    // The object's address is its ID in the tree: names needn't be unique, addresses are.
+    const bool open = ImGui::TreeNodeEx(&gameObject, flags, "%s", gameObject.GetName().c_str());
+    if (!active)
+        ImGui::PopStyleColor();
+
+    // A click on the name selects the object; a click on the arrow only opens or closes it.
+    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+        m_Selected = &gameObject;
+
+    if (open) {
+        for (Transform* child : children)
+            DrawHierarchyNode(child->GetGameObject());
+        ImGui::TreePop();
+    }
+}
+
+void DebugWindows::DrawInspector(GameObject& gameObject)
+{
+    ImGui::Text("%s", gameObject.GetName().c_str());
+
+    // The object's own switch: below an inactive parent it stays hidden either way.
+    bool active = gameObject.IsActiveSelf();
+    if (ImGui::Checkbox("Active", &active))
+        gameObject.SetActive(active);
+    // Destroying is deferred: the object and its children disappear at the end of this frame's
+    // updates, and the selection is forgotten on the next frame, once it's gone from the scene.
+    ImGui::SameLine();
+    if (ImGui::Button("Destroy"))
+        gameObject.GetScene().Destroy(gameObject);
+
+    // The Transform's local values, relative to the parent, as in Unity's inspector. DragFloat3
+    // edits three floats in a row: a glm::vec3's x, y and z lie one after another in memory, so &x
+    // is all it needs.
+    Transform& transform = gameObject.GetTransform();
+    ImGui::DragFloat3("Position", &transform.LocalPosition.x, 0.05f);
+    // The rotation is a quaternion. It's shown as three angles in degrees around X, Y and Z
+    // ("Euler angles"), converted both ways every frame. They're taken apart in Unity's order: a
+    // turn around Z, then X, then Y. That way the usual turn, around Y, covers the full -180..180,
+    // and only the tilt around X is limited to -90..90 (past that, the three angles jump to a
+    // different set that means the same rotation; Unity's inspector avoids even that by
+    // remembering the angles typed in).
+    glm::vec3 angles; // x: around X, y: around Y, z: around Z
+    glm::extractEulerAngleYXZ(glm::mat4_cast(transform.LocalRotation), angles.y, angles.x, angles.z);
+    angles = glm::degrees(angles);
+    if (ImGui::DragFloat3("Rotation", &angles.x, 0.5f)) {
+        const glm::vec3 radians = glm::radians(angles);
+        transform.LocalRotation = glm::quat_cast(glm::eulerAngleYXZ(radians.y, radians.x, radians.z));
+    }
+    ImGui::DragFloat3("Scale", &transform.LocalScale.x, 0.01f);
+
+    // The components this window knows how to show. GetComponent returns nullptr when the object
+    // has none of that type.
+    if (Camera* camera = gameObject.GetComponent<Camera>()) {
+        ImGui::SeparatorText("Camera");
+        // The angle is stored in radians, and SliderAngle shows and edits it in degrees.
+        // AlwaysClamp also limits values typed in (Ctrl+click a slider to type).
+        ImGui::SliderAngle("Field of view", &camera->FieldOfView, 20.0f, 120.0f, "%.0f deg", ImGuiSliderFlags_AlwaysClamp);
+    }
+    if (FlyCamera* flyCamera = gameObject.GetComponent<FlyCamera>()) {
+        ImGui::SeparatorText("Fly Camera");
+        ImGui::SliderFloat("Move speed", &flyCamera->MoveSpeed, 0.5f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+    }
+    if (Spinner* spinner = gameObject.GetComponent<Spinner>()) {
+        ImGui::SeparatorText("Spinner");
+        ImGui::DragFloat("Speed", &spinner->DegreesPerSecond, 1.0f, 0.0f, 0.0f, "%.0f deg/s");
+    }
+    if (gameObject.GetComponent<MeshRenderer>()) {
+        ImGui::SeparatorText("Mesh Renderer");
+        ImGui::TextDisabled("Draws a mesh with a material");
+    }
 }

@@ -3,7 +3,8 @@ add_executable(Sandbox
     src/DebugWindows.cpp
     src/DemoScene.cpp
     src/FlyCamera.cpp
-    src/Main.cpp)
+    src/Main.cpp
+    src/Spinner.cpp)
 
 # Linking VivaEngine also brings in everything the engine declared PUBLIC: its include/
 # folder, C++20, GLM, Dear ImGui's imgui.h and the VIVA_DEBUG define. SDL3 and Vulkan get linked

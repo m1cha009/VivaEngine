@@ -3,15 +3,12 @@
 
 #include "DebugWindows.h"
 #include "DemoScene.h"
-#include "FlyCamera.h"
 
 #include "Viva/Application.h"
 #include "Viva/Assert.h"
 #include "Viva/Input.h"
 #include "Viva/Log.h"
 #include "Viva/Time.h"
-
-#include <glm/trigonometric.hpp>
 
 #include <cstdint>
 #include <cstdlib>
@@ -26,7 +23,8 @@ using namespace Viva;
 constexpr const char* kTitle = "VivaEngine Sandbox";
 
 // The game itself. It derives from Application and overrides the parts it needs, the way a
-// MonoBehaviour overrides Start and Update.
+// MonoBehaviour overrides Start and Update. The scene's objects bring their own behavior as
+// components (FlyCamera, Spinner); this class handles what concerns the whole game.
 class SandboxApp : public Application {
 public:
     // quitAfter: seconds until the app quits by itself, or 0 to run until Esc or the window closes.
@@ -39,12 +37,7 @@ public:
 protected:
     void OnStart() override
     {
-        // Start a little above the floor and back from the middle, looking slightly down.
-        Camera& camera = GetCamera();
-        camera.Position = { 0.0f, 3.0f, 9.0f };
-        camera.Pitch = glm::radians(-12.0f);
-
-        m_Scene.Load(GetRenderer());
+        LoadDemoScene(GetScene(), GetRenderer());
 
         Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
                   "around. F1 shows or hides the debug windows. Esc quits.");
@@ -52,9 +45,7 @@ protected:
 
     void OnUpdate(float dt) override
     {
-        m_FlyCamera.Update(GetCamera(), dt);
-        m_Scene.Draw(GetRenderer(), static_cast<float>(Time::SinceStart()));
-        m_DebugWindows.Draw(dt, GetRenderer(), GetCamera(), m_FlyCamera);
+        m_DebugWindows.Draw(dt, GetRenderer(), GetScene());
 
         const bool timeIsUp = m_QuitAfter > 0.0f && Time::SinceStart() >= m_QuitAfter;
         if (Input::GetKeyDown(Key::Escape) || timeIsUp)
@@ -72,8 +63,6 @@ protected:
     }
 
 private:
-    DemoScene m_Scene;
-    FlyCamera m_FlyCamera;
     DebugWindows m_DebugWindows;
     float m_QuitAfter = 0.0f;
 };

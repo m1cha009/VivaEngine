@@ -11,7 +11,6 @@
 
 namespace Viva {
 
-struct Camera;
 class Window;
 
 // GPU resources. A game holds them through std::shared_ptr and hands them back to the renderer;
@@ -73,9 +72,16 @@ public:
 
     // Queues `mesh`, drawn with `material` and placed in the world by `transform` (its model
     // matrix), for the frame being built. Like Unity's Graphics.DrawMesh: it lasts one frame, so
-    // call it every frame, from OnUpdate (the only time a frame is being built).
+    // call it every frame, from OnUpdate (the only time a frame is being built). The scene submits
+    // its MeshRenderers this way by itself; call it for anything extra.
     void Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                 const glm::mat4& transform);
+
+    // Where the frame is seen from: a view matrix and a projection matrix (see Viva/Camera.h).
+    // The scene sets them every frame from its main camera. They stay until set again.
+    void SetCamera(const glm::mat4& view, const glm::mat4& projection);
+    // The width of the image being drawn divided by its height: a camera's projection needs it.
+    float GetAspectRatio() const;
 
     // Numbers about the last frame drawn: draw calls, triangles and GPU memory.
     const RenderStats& GetStats() const;
@@ -97,8 +103,8 @@ private:
     // false if this frame can't be drawn (the window is minimized or was just resized); then
     // EndFrame must not be called.
     bool BeginFrame();
-    // Draws everything submitted since BeginFrame, seen from `camera`, and shows it.
-    void EndFrame(const Camera& camera);
+    // Draws everything submitted since BeginFrame, seen from the camera last set, and shows it.
+    void EndFrame();
 
     struct Impl;
     std::unique_ptr<Impl> m_Impl;
