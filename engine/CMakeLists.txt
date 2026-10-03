@@ -38,6 +38,7 @@ add_library(VivaEngine STATIC
     src/Scene/Camera.cpp
     src/Scene/Component.cpp
     src/Scene/GameObject.cpp
+    src/Scene/Model.cpp
     src/Scene/Scene.cpp
     src/Scene/Transform.cpp)
 
@@ -73,14 +74,14 @@ endif()
 # PUBLIC: games use GLM math types through the engine's API, so they get GLM's headers (and its
 # settings, see cmake/Dependencies.cmake) too. Likewise Dear ImGui's core: games build their
 # debug windows with imgui.h.
-# PRIVATE: SDL3, VMA, stb_image, ImGui's SDL and Vulkan backends, and Vulkan are implementation
-# details. Their headers aren't visible to games at all, so the sandbox physically can't include
-# them. (Inside the engine, "SDL only in Platform/, Vulkan only in Renderer/" is a convention we
-# follow, not something the build enforces.) The libraries are listed before Vulkan so their
-# headers win if the Vulkan SDK was installed with its optional SDL/GLM/VMA copies.
+# PRIVATE: SDL3, VMA, stb_image, cgltf, ImGui's SDL and Vulkan backends, and Vulkan are
+# implementation details. Their headers aren't visible to games at all, so the sandbox physically
+# can't include them. (Inside the engine, "SDL only in Platform/, Vulkan only in Renderer/" is a
+# convention we follow, not something the build enforces.) The libraries are listed before Vulkan
+# so their headers win if the Vulkan SDK was installed with its optional SDL/GLM/VMA copies.
 target_link_libraries(VivaEngine
     PUBLIC glm::glm imgui::imgui
-    PRIVATE SDL3::SDL3-static GPUOpen::VulkanMemoryAllocator stb::image imgui::backends Vulkan::Vulkan)
+    PRIVATE SDL3::SDL3-static GPUOpen::VulkanMemoryAllocator stb::image cgltf::cgltf imgui::backends Vulkan::Vulkan)
 
 viva_set_warnings(VivaEngine)
 

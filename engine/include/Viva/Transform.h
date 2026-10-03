@@ -4,6 +4,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include <string_view>
 #include <vector>
 
 namespace Viva {
@@ -58,6 +59,11 @@ public:
     Transform* GetParent() const { return m_Parent; }
     const std::vector<Transform*>& GetChildren() const { return m_Children; }
     void SetParent(Transform* parent);
+
+    // The child whose GameObject has this name, or nullptr: Unity's transform.Find. Only direct
+    // children are searched, but a path like "Body/Wheels" goes one level down per name. Names
+    // needn't be unique: the first match wins, and with a path, the first one the rest is below.
+    Transform* Find(std::string_view path) const;
 
     GameObject& GetGameObject() const { return *m_GameObject; }
 

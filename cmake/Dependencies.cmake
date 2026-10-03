@@ -64,15 +64,28 @@ FetchContent_Declare(stb
     URL https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz
     URL_HASH SHA256=9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515)
 
-FetchContent_MakeAvailable(SDL3 glm VulkanMemoryAllocator stb)
+# --- cgltf: glTF model loading ---------------------------------------------------------------
+# A glTF parser in a single C header (MIT license). glTF is the Khronos Group's file format for
+# 3D models, the one most tools export. Like stb_image it has no CMakeLists.txt at the top, so
+# MakeAvailable just unpacks it, and the cgltf target below exposes the header. Its
+# implementation is compiled once, in engine/src/Scene/Model.cpp.
+FetchContent_Declare(cgltf
+    URL https://github.com/jkuhlmann/cgltf/archive/refs/tags/v1.15.tar.gz
+    URL_HASH SHA256=84e352092e5cd6aab7f66de62ddb66beb5e6f18d412ca9d12950d7a55bfef25a)
+
+FetchContent_MakeAvailable(SDL3 glm VulkanMemoryAllocator stb cgltf)
 
 # An INTERFACE library is a target with no code of its own, only settings for whoever links it:
-# here, the folder with stb_image.h, as a SYSTEM include so its warnings stay hidden. The
-# namespaced alias matches the other dependencies, and a misspelled "stb::" name fails when
-# CMake configures instead of when the linker runs.
+# here, the folder with stb_image.h (or cgltf.h), as a SYSTEM include so its warnings stay
+# hidden. The namespaced alias matches the other dependencies, and a misspelled "stb::" name
+# fails when CMake configures instead of when the linker runs.
 add_library(stb_image INTERFACE)
 add_library(stb::image ALIAS stb_image)
 target_include_directories(stb_image SYSTEM INTERFACE ${stb_SOURCE_DIR})
+
+add_library(cgltf INTERFACE)
+add_library(cgltf::cgltf ALIAS cgltf)
+target_include_directories(cgltf SYSTEM INTERFACE ${cgltf_SOURCE_DIR})
 
 # GLM's settings must be identical everywhere GLM is used, so they're attached to GLM's own
 # target: anything that links glm::glm gets them.

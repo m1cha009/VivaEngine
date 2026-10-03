@@ -105,6 +105,8 @@ jobs:
         # The Sandbox opens a window, so --quit-after makes it end on its own after two seconds.
         # The first lines of its output also become a notice on the run's summary page (and in
         # the public API), which shows what macOS reported without opening the full log.
+        # Its warning and error lines become a warning annotation, and an error fails the check:
+        # a model that didn't load, or a validation error, doesn't stop the app, but it's a failure.
         # If the runner's virtual Mac has no usable Vulkan GPU, the Sandbox stops with "No suitable
         # GPU found": that's reported as a warning, since only the startup before it could be tested.
         run: |
@@ -118,8 +120,15 @@ jobs:
             if [ "${code}" -ne 0 ]; then
               if grep -q "No suitable GPU found" "run-${config}.log"; then
                 echo "::warning title=Sandbox ${config}::No suitable Vulkan GPU on this runner; rendering was not tested"
-              else
-                exit "${code}"
+                continue
+              fi
+              exit "${code}"
+            fi
+            if grep -E "\[(Warn |Error)\]" "run-${config}.log" > "problems-${config}.log"; then
+              echo "::warning title=Sandbox ${config} warnings and errors::$(head -n 20 "problems-${config}.log" | tr '\n' ' ')"
+              if grep -q "\[Error\]" "problems-${config}.log"; then
+                echo "::error::Sandbox ${config} logged errors (listed above)"
+                exit 1
               fi
             fi
           done

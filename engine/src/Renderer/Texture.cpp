@@ -1,12 +1,9 @@
 #include "Renderer/Texture.h"
 
-#include "Core/ImageFile.h"
 #include "Renderer/Buffer.h"
 #include "Renderer/VulkanCheck.h"
 #include "Renderer/VulkanContext.h"
 #include "Renderer/VulkanHelpers.h"
-#include "Viva/Assert.h"
-#include "Viva/Log.h"
 
 #include <algorithm>
 #include <bit>
@@ -102,22 +99,9 @@ void RecordUploadAndMipmaps(VkCommandBuffer cmd, VkBuffer staging, VkImage image
 
 } // namespace
 
-std::unique_ptr<Texture> Texture::Load(const VulkanContext& context, const std::string& path)
-{
-    const std::optional<ImageData> image = LoadImageFile(path);
-    if (!image)
-        return nullptr;
-    std::unique_ptr<Texture> texture = Create(context, image->Width, image->Height, image->Pixels);
-    Log::Trace("Texture loaded: {} ({}x{})", path, image->Width, image->Height);
-    return texture;
-}
-
 std::unique_ptr<Texture> Texture::Create(const VulkanContext& context, uint32_t width, uint32_t height,
                                          std::span<const uint8_t> pixels)
 {
-    VIVA_ASSERT(width > 0 && height > 0 && pixels.size() == size_t { width } * height * 4,
-                "a {}x{} texture needs {} bytes of RGBA pixels, not {}", width, height,
-                size_t { width } * height * 4, pixels.size());
     auto texture = std::make_unique<Texture>(context.GetDevice());
 
     // Mip levels: the image, then copies of half the size, down to 1x1. A 256x256 texture has 9

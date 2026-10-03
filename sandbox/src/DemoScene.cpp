@@ -5,6 +5,7 @@
 
 #include "Viva/Camera.h"
 #include "Viva/MeshRenderer.h"
+#include "Viva/Model.h"
 #include "Viva/Primitives.h"
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
@@ -20,6 +21,14 @@ using namespace Viva;
 namespace {
 
 constexpr int kPillarCount = 8;
+constexpr float kPillarRingRadius = 6.0f;
+constexpr float kPillarHeight = 3.0f;
+
+// The milk truck drives in a circle around the pillars, in meters and seconds.
+constexpr float kTruckSpeed = 3.0f;
+constexpr float kTruckCircleRadius = 9.5f;
+// The model's wheels are 0.86 m across (see the wheel mesh's size in the file).
+constexpr float kWheelRadius = 0.43f;
 
 // A cube whose six faces have their own colors: the built-in cube, with its vertex colors
 // changed. Its faces come in the order +X, -X, +Y, -Y, +Z, -Z, four vertices each.
@@ -48,12 +57,20 @@ void LoadDemoScene(Scene& scene, Renderer& renderer)
     // LoadTexture returns null and that material is plain white.
     const std::shared_ptr<Mesh> cubeMesh = renderer.CreateMesh(Primitives::Cube());
     const std::shared_ptr<Mesh> pillarMesh = renderer.CreateMesh(ColoredCube());
-    // 24 x 24 units, with the checker texture (2x2 squares) repeated 12 times along each side:
+    // 28 x 28 units, with the checker texture (2x2 squares) repeated 14 times along each side:
     // one square per unit.
-    const std::shared_ptr<Mesh> floorMesh = renderer.CreateMesh(Primitives::Plane(24.0f, 12.0f));
+    const std::shared_ptr<Mesh> floorMesh = renderer.CreateMesh(Primitives::Plane(28.0f, 14.0f));
     const std::shared_ptr<Material> crateMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") });
     const std::shared_ptr<Material> floorMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/checker.png") });
     const std::shared_ptr<Material> pillarMaterial = renderer.CreateMaterial({});
+
+    // Models (M11) are loaded once, then placed in the scene with Instantiate, as often as needed:
+    // every instance shares the model's meshes, materials and textures. Load returns null if a
+    // file is missing or broken (the log says why), and the scene does without that model.
+    // These unique_ptrs let go of the models at the end of this function; the instances keep the
+    // meshes and materials they use alive.
+    const std::unique_ptr<Model> logoBox = Model::Load(renderer, "models/BoxTextured/BoxTextured.gltf");
+    const std::unique_ptr<Model> truck = Model::Load(renderer, "models/CesiumMilkTruck.glb");
 
     GameObject& floor = scene.CreateGameObject("Floor");
     floor.AddComponent<MeshRenderer>(floorMesh, floorMaterial);
@@ -65,14 +82,22 @@ void LoadDemoScene(Scene& scene, Renderer& renderer)
     ring.AddComponent<Spinner>(glm::vec3(0.0f, 1.0f, 0.0f), 6.0f);
     for (int i = 0; i < kPillarCount; ++i) {
         const float angle = glm::two_pi<float>() * (static_cast<float>(i) + 0.5f) / static_cast<float>(kPillarCount);
-        constexpr float kRadius = 6.0f;
-        constexpr float kHeight = 3.0f;
+        const float x = kPillarRingRadius * std::cos(angle);
+        const float z = kPillarRingRadius * std::sin(angle);
         // std::format builds the name like C#'s string interpolation: "Pillar 1", "Pillar 2"...
         GameObject& pillar = scene.CreateGameObject(std::format("Pillar {}", i + 1), &ring);
         Transform& transform = pillar.GetTransform();
-        transform.LocalPosition = { kRadius * std::cos(angle), kHeight / 2.0f, kRadius * std::sin(angle) };
-        transform.LocalScale = { 0.6f, kHeight, 0.6f }; // a cube stretched tall
+        transform.LocalPosition = { x, kPillarHeight / 2.0f, z };
+        transform.LocalScale = { 0.6f, kPillarHeight, 0.6f }; // a cube stretched tall
         pillar.AddComponent<MeshRenderer>(pillarMesh, pillarMaterial);
+
+        // A logo box on top of each pillar: eight instances of one model. It's the ring's child,
+        // not the pillar's, because the pillar's stretched scale would stretch it too.
+        if (logoBox) {
+            Transform& box = logoBox->Instantiate(scene, &ring).GetTransform();
+            box.LocalPosition = { x, kPillarHeight + 0.3f, z };
+            box.LocalScale = glm::vec3(0.6f); // the model is a 1 m cube
+        }
     }
 
     // The crate in the middle: hovering above the floor and turning around a tilted axis.
@@ -91,13 +116,39 @@ void LoadDemoScene(Scene& scene, Renderer& renderer)
     smallCrate.AddComponent<MeshRenderer>(cubeMesh, crateMaterial);
     smallCrate.AddComponent<Spinner>(glm::vec3(0.0f, 1.0f, 0.0f), 180.0f);
 
-    // The camera: a little above the floor and back from the middle (at +Z), looking at it. Read
-    // right to left: tilted 12 degrees down (a positive turn around X tips the front down, as in
-    // Unity), then turned around (180 degrees around Y) to face -Z, towards the middle.
+    // The milk truck drives around everything. An empty object in the middle turns, and carries
+    // its child, the truck, around with it, like a carousel. Turning the positive way around Y
+    // moves a point at +X towards -Z, so the truck, whose front faces +Z like every glTF model,
+    // is turned around to face that way. kTruckSpeed / kTruckCircleRadius is how fast the circle
+    // must turn, in radians per second, for the truck to drive kTruckSpeed meters per second.
+    if (truck) {
+        GameObject& pivot = scene.CreateGameObject("Truck pivot");
+        pivot.AddComponent<Spinner>(glm::vec3(0.0f, 1.0f, 0.0f), glm::degrees(kTruckSpeed / kTruckCircleRadius));
+        GameObject& milkTruck = truck->Instantiate(scene, &pivot);
+        milkTruck.GetTransform().LocalPosition = { kTruckCircleRadius, 0.0f, 0.0f };
+        milkTruck.GetTransform().LocalRotation = glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // The file animates the wheels, but the engine doesn't play animations yet, so a Spinner
+        // turns them instead, found by name in the model's hierarchy. For the wheels to roll
+        // rather than slide, they turn kTruckSpeed / kWheelRadius radians per second. Their axle
+        // is Y in the file's own axes (the file's "Yup2Zup" node turns those so that its Z points
+        // up), and rolling forward turns them the negative way around it.
+        constexpr const char* kAxles[] = { "Yup2Zup/Cesium_Milk_Truck/Node/Wheels",
+                                            "Yup2Zup/Cesium_Milk_Truck/Node.001/Wheels.001" };
+        for (const char* axle : kAxles) {
+            if (Transform* wheels = milkTruck.GetTransform().Find(axle))
+                wheels->GetGameObject().AddComponent<Spinner>(glm::vec3(0.0f, -1.0f, 0.0f),
+                                                              glm::degrees(kTruckSpeed / kWheelRadius));
+        }
+    }
+
+    // The camera: above the floor and back from the middle (at +Z), outside the truck's circle,
+    // looking at the middle. Read right to left: tilted 18 degrees down (a positive turn around X
+    // tips the front down, as in Unity), then turned around (180 degrees around Y) to face -Z.
     GameObject& camera = scene.CreateGameObject("Camera");
-    camera.GetTransform().LocalPosition = { 0.0f, 3.0f, 9.0f };
+    camera.GetTransform().LocalPosition = { 0.0f, 5.5f, 15.0f };
     camera.GetTransform().LocalRotation = glm::angleAxis(glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)) *
-                                          glm::angleAxis(glm::radians(12.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+                                          glm::angleAxis(glm::radians(18.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     camera.AddComponent<Camera>();
     camera.AddComponent<FlyCamera>();
 }

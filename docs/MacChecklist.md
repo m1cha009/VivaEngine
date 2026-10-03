@@ -167,3 +167,15 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       click, and drag the inspector's values.
 - [ ] Destroying "Crate" and "Pillar ring" in the inspector removes them (and their children) with
       no validation output. The Stats window's allocations drop as on Windows.
+
+## M11: Model loading
+
+- [ ] **(CI)** cgltf builds with Apple Clang, and the Sandbox loads both models. CI now fails if
+      the Sandbox logs an error, such as a model file that wasn't found.
+- [ ] Both models look as on Windows: logo boxes on the pillars, and the white milk truck with dark
+      green windows, driving cab first with its wheels rolling forward.
+- [ ] The models load from inside the app's folder, with `BoxTextured.gltf`, its `.bin` and its
+      `.png` side by side in `assets/models/BoxTextured/`. File names in a `.gltf` must match the
+      files' exact case, because a macOS volume can be case-sensitive.
+- [ ] Destroying "Truck pivot" in the inspector frees its 9 allocations, as on Windows, with no
+      validation output.

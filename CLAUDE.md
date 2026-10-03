@@ -30,8 +30,8 @@
 | Image decoding | stb_image (FetchContent, pinned commit archive, PNG/JPEG only, PRIVATE to the engine), since M7 |
 
 **Approved for later milestones** (add each only when its milestone arrives):
-- Dear ImGui (SDL3 + Vulkan backends)
-- cgltf
+- Dear ImGui (SDL3 + Vulkan backends): added in M9
+- cgltf: added in M11
 
 **Anything else needs Michail's approval first.**
 
@@ -82,7 +82,7 @@ VivaEngine/
 │       ├── Core/           # Application, Log, Assert, Time
 │       ├── Platform/       # Window, Input (SDL3 lives only here)
 │       ├── Renderer/       # all Vulkan code
-│       └── Scene/          # Scene, GameObject, Component, Transform, Camera (since M10)
+│       └── Scene/          # Scene, GameObject, Component, Transform, Camera (since M10), Model (M11)
 ├── sandbox/                # executable target: test app / game using the engine
 ├── shaders/                # GLSL sources
 ├── assets/
@@ -239,9 +239,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M11 (glTF model loading with cgltf) is next. Done: M0–M10 (M0–M8 on 2026-10-03, M9–M10 on 2026-10-04).
-- **Verified on Windows:** M0–M10, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
-- **CI (macOS):** green through M9. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M12 (the lane runner) is next. Done: M0–M11 (M0–M8 on 2026-10-03, M9–M11 on 2026-10-04).
+- **Verified on Windows:** M0–M11, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
+- **CI (macOS):** green through M10. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -540,3 +540,22 @@ Append one line per decision: date, decision, reason.
   - **Deferred to M11:**
     - A glTF mesh has several primitives with their own materials, but only one MeshRenderer per GameObject is drawn. Either MeshRenderer gets a list of mesh+material parts (like Unity's submeshes + `materials[]`), or the loader makes a child object per primitive.
     - `Transform::FindChild(name)` for named nodes such as the truck's wheels.
+- 2026-10-04: M11 design:
+  - **Dependency:** cgltf 1.15 (latest release, 2025-02-09), from the GitHub tag archive pinned by SHA-256, as an INTERFACE target `cgltf::cgltf` (SYSTEM include) linked PRIVATE to the engine. Its implementation is compiled in `Scene/Model.cpp`, as stb's is in `ImageFile.cpp`.
+  - **Assets:** `BoxTextured` as `.gltf` + `.bin` + `.png` (readable JSON; exercises external files) and `CesiumMilkTruck` as `.glb` (exercises embedded images), both unchanged, in `assets/models/` with `CREDITS.md`: CC BY 4.0, © 2017 Cesium, plus the sample repo's notice for the Cesium logo both show (LicenseRef-LegalMark-Cesium: used by permission under Cesium's guidelines, no rights beyond them). The credits are copied with the assets, so they're in every package. `.gitattributes` marks png/jpg/bin/glb as binary.
+  - **Public API:** `Viva/Model.h`. `Model::Load(Renderer&, assetName)` returns a `unique_ptr` (null after logging why). `Instantiate(Scene&, parent)` returns a top GameObject named after the file, with the node tree below it: Unity's model prefab and `Instantiate`. Instances share meshes, materials and textures through `shared_ptr`, so the `Model` can go once its instances exist. `Renderer::CreateTexture(w, h, pixels)` is public (procedural textures too).
+  - **Loading:** `cgltf_parse_file` + `cgltf_load_buffers` with file callbacks through `ReadBinaryFile` (UTF-8 paths; the bytes are copied into `malloc`'d memory for cgltf's release callback), then `cgltf_validate`. A `unique_ptr<cgltf_data, CgltfDeleter>` owns the result. Files with `extensionsRequired` are refused. Animations and skins are reported (Info) and left out.
+  - **Materials:** base color factor × base color texture only, since there's no lighting. One texture per image, made when a material first uses it (the truck's two textures share one 2048² JPEG). Images inside a `.glb`: `DecodeImage(span)` (split from `LoadImageFile`, the M7 deferral) + `CreateTexture`. Image files next to a `.gltf`: `Renderer::LoadTexture(folder + percent-decoded URI)`, sharing the name cache. `data:` URI images aren't supported. A primitive without a material gets a plain white one.
+  - **Meshes:** one engine `Mesh` per triangle primitive: POSITION, TEXCOORD_0, COLOR_0 (white without), indices (0..n-1 without). Other primitive modes are skipped with a warning.
+  - **The M10 deferrals:** a multi-primitive mesh becomes one `MeshRenderer` with `std::vector<MeshPart> Parts` (a mesh and a material each; the two-argument constructor stays). Unity's submeshes + `materials[]` would need submesh ranges in `Mesh` and in the draw list, for nothing, while each glTF primitive has its own vertices anyway. `Transform::Find(path)` is Unity's: direct children, `/` steps down a level.
+  - **Nodes:** a name (else the mesh's name, else "Node N"); TRS (glTF quaternions are x, y, z, w: `glm::quat::wxyz`), or a matrix taken apart (column 3; the column lengths, with the determinant's sign; `quat_cast` of the normalized axes). The top nodes are those of the file's scene (`scene`, else the first).
+  - **M7/M8 deferrals:** the color-space parameter waits for the first data texture (only base color is loaded, always sRGB). glTF sampler settings are ignored (both models use repeat + linear), and the sampler cache is dropped: each Texture owns an identical sampler, which is fine at this scale; if anything, the end state is one sampler owned by the renderer.
+  - **Sandbox:** 8 BoxTextured instances on the pillars (children of the ring: the pillars' non-uniform scale would stretch them). The truck rides a spinning pivot (3 m/s on a 9.5 m circle). Its axles are found with `Transform::Find` and turned by Spinners at speed/radius around −Y in the file's axes. That direction matches the file's wheel animation, and was checked by measuring the hub's rotation between screenshots. Floor 28×28; camera at (0, 5.5, 15), tilted 18° down.
+  - **CI:** the Run Sandbox step turns the log's `[Warn ]`/`[Error]` lines into a warning annotation, and fails on any `[Error]`: a model that didn't load doesn't stop the app.
+- 2026-10-04: M11 `/simplify` pass:
+  - **One way to a texture:** `Texture::Load` was removed. `Renderer::Impl::LoadTexture` is the name cache + `LoadImageFile` + `CreateTexture`, and the white texture uses `CreateTexture` too. So the size check exists once (it was also an assert in `Texture::Create`), and `Renderer/Texture` no longer knows about image files.
+  - **Model:** a node holds its part list directly (no `m_Meshes` + optional index). `TextureFromImage` returns early, with a message for each failure. No fallback for files without a scene: by the glTF spec that's a library, so it gets a warning and empty instances. `GetName()` was dropped (unused).
+  - `Transform::Find` tries the next child with the same name when the rest of a path isn't below the first.
+  - The sandbox finds the axles with whole paths.
+  - **Efficiency review:** nothing to change. The truck loads in ~80 ms in Debug (mostly decoding its JPEG), and `Instantiate` does no GPU work, so M12 can spawn at runtime; it should keep its `Model`s as members (Load has no cache). Skipped: two extra copies in `ReadFile` and `DecodeImage` (milliseconds, at load), creating materials lazily (both models use all theirs), and `STBI_NEON` for stb_image on Apple Silicon (startup only).
+  - **Deferred:** mirrored objects (a negative scale, or a mirrored glTF node) are drawn inside out, because the front face is fixed and back faces are culled. Fix when something is mirrored: record the sign of the world matrix's determinant per draw, make the front face dynamic state (`VK_DYNAMIC_STATE_FRONT_FACE`, core in 1.3) and call `vkCmdSetFrontFace` when it changes, like Unity's automatic culling flip.

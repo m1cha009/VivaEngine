@@ -1,5 +1,6 @@
 #include "Viva/Renderer.h"
 
+#include "Core/ImageFile.h"
 #include "Platform/FileSystem.h"
 #include "Platform/Window.h"
 #include "Renderer/DescriptorAllocator.h"
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <iterator>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -78,6 +80,7 @@ public:
 
     std::shared_ptr<Mesh> CreateMesh(const MeshData& data);
     std::shared_ptr<Texture> LoadTexture(const std::string& assetName);
+    std::shared_ptr<Texture> CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
     std::shared_ptr<Material> CreateMaterial(const MaterialSettings& settings);
     void Submit(const Mesh& mesh, const Material& material, const glm::mat4& transform);
     const RenderStats& GetStats() const { return m_Stats; }
@@ -171,6 +174,7 @@ Renderer::~Renderer() = default;
 
 std::shared_ptr<Mesh> Renderer::CreateMesh(const MeshData& data) { return m_Impl->CreateMesh(data); }
 std::shared_ptr<Texture> Renderer::LoadTexture(const std::string& assetName) { return m_Impl->LoadTexture(assetName); }
+std::shared_ptr<Texture> Renderer::CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels) { return m_Impl->CreateTexture(width, height, pixels); }
 std::shared_ptr<Material> Renderer::CreateMaterial(const MaterialSettings& settings) { return m_Impl->CreateMaterial(settings); }
 const RenderStats& Renderer::GetStats() const { return m_Impl->GetStats(); }
 void Renderer::SetVSync(bool enabled) { m_Impl->SetVSync(enabled); }
@@ -268,7 +272,7 @@ bool Renderer::Impl::Initialize()
     if (!m_DefaultShader)
         return false;
     constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
-    m_WhiteTexture = Track(Texture::Create(*m_Context, 1, 1, kWhitePixel));
+    m_WhiteTexture = CreateTexture(1, 1, kWhitePixel);
 
     // The debug UI is drawn in the same rendering as the scene, so its pipeline is built for the
     // same color and depth formats.
@@ -294,9 +298,26 @@ std::shared_ptr<Texture> Renderer::Impl::LoadTexture(const std::string& assetNam
     if (std::shared_ptr<Texture> texture = cached.lock())
         return texture;
 
-    std::shared_ptr<Texture> texture = Track(Texture::Load(*m_Context, GetAssetPath(assetName)));
+    // The file is decoded on the CPU (stb_image, M7), and the pixels are uploaded like any others.
+    const std::optional<ImageData> image = LoadImageFile(GetAssetPath(assetName));
+    if (!image)
+        return nullptr;
+    std::shared_ptr<Texture> texture = CreateTexture(image->Width, image->Height, image->Pixels);
+    Log::Trace("Texture loaded: {} ({}x{})", assetName, image->Width, image->Height);
     cached = texture;
     return texture;
+}
+
+std::shared_ptr<Texture> Renderer::Impl::CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels)
+{
+    // Every texture comes through here, so this one check covers them all. The pixels may come
+    // from the game, so a mismatch is reported in every build, rather than read past the end.
+    if (width == 0 || height == 0 || pixels.size() != size_t { width } * height * 4) {
+        Log::Error("A {}x{} texture needs {} bytes of RGBA pixels, not {}", width, height,
+                   size_t { width } * height * 4, pixels.size());
+        return nullptr;
+    }
+    return Track(Texture::Create(*m_Context, width, height, pixels));
 }
 
 std::shared_ptr<Shader> Renderer::Impl::LoadShader(const std::string& name)

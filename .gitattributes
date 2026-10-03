@@ -4,3 +4,10 @@
 # cmd.exe misreads batch files that have LF-only line endings, so always check them out as CRLF.
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# Binary assets: stored and checked out byte for byte. (Git usually detects binary files by
+# itself, but a small file can fool it, and a changed byte breaks a .bin or .glb.)
+*.png binary
+*.jpg binary
+*.bin binary
+*.glb binary

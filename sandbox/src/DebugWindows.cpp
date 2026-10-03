@@ -225,8 +225,8 @@ void DebugWindows::DrawInspector(GameObject& gameObject)
         ImGui::SeparatorText("Spinner");
         ImGui::DragFloat("Speed", &spinner->DegreesPerSecond, 1.0f, 0.0f, 0.0f, "%.0f deg/s");
     }
-    if (gameObject.GetComponent<MeshRenderer>()) {
+    if (const MeshRenderer* meshRenderer = gameObject.GetComponent<MeshRenderer>()) {
         ImGui::SeparatorText("Mesh Renderer");
-        ImGui::TextDisabled("Draws a mesh with a material");
+        ImGui::TextDisabled("Draws %zu mesh(es), each with its material", meshRenderer->Parts.size());
     }
 }

@@ -19,8 +19,15 @@ viva_set_warnings(Sandbox)
 viva_compile_shaders(Sandbox)
 
 # The game's assets, copied next to the executable (see cmake/Assets.cmake). DemoScene loads
-# the textures with Renderer::LoadTexture.
+# the textures with Renderer::LoadTexture and the models with Model::Load. A .gltf model's .bin
+# and image files are listed too: the .gltf only refers to them. CREDITS.md travels with the
+# models, because their license asks for credit wherever they go.
 viva_copy_assets(Sandbox
+    models/BoxTextured/BoxTextured.gltf
+    models/BoxTextured/BoxTextured0.bin
+    models/BoxTextured/CesiumLogoFlat.png
+    models/CesiumMilkTruck.glb
+    models/CREDITS.md
     textures/checker.png
     textures/crate.png)
 

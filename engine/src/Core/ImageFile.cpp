@@ -19,21 +19,17 @@
 
 namespace Viva {
 
-std::optional<ImageData> LoadImageFile(const std::string& path)
+std::optional<ImageData> DecodeImage(std::span<const uint8_t> encoded, const std::string& name)
 {
-    const std::optional<std::vector<uint8_t>> file = ReadBinaryFile(path);
-    if (!file)
-        return std::nullopt;
-
     // STBI_rgb_alpha: always decode to 4 channels, whatever the file holds. GPUs work with RGBA,
     // and 3-channel formats are rarely supported for textures.
     int width = 0;
     int height = 0;
     int channelsInFile = 0;
-    stbi_uc* pixels = stbi_load_from_memory(file->data(), static_cast<int>(file->size()), &width, &height,
+    stbi_uc* pixels = stbi_load_from_memory(encoded.data(), static_cast<int>(encoded.size()), &width, &height,
                                             &channelsInFile, STBI_rgb_alpha);
     if (!pixels) {
-        Log::Error("Couldn't decode {}: {}", path, stbi_failure_reason());
+        Log::Error("Couldn't decode {}: {}", name, stbi_failure_reason());
         return std::nullopt;
     }
 
@@ -46,6 +42,14 @@ std::optional<ImageData> LoadImageFile(const std::string& path)
     };
     stbi_image_free(pixels);
     return image;
+}
+
+std::optional<ImageData> LoadImageFile(const std::string& path)
+{
+    const std::optional<std::vector<uint8_t>> file = ReadBinaryFile(path);
+    if (!file)
+        return std::nullopt;
+    return DecodeImage(*file, path);
 }
 
 } // namespace Viva

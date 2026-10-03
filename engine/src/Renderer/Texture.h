@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <string>
 
 namespace Viva {
 
@@ -19,11 +18,9 @@ class VulkanContext;
 // settings.
 class Texture : public GpuResource {
 public:
-    // Loads a PNG or JPEG file. Returns nullptr (after logging why) if it can't.
-    static std::unique_ptr<Texture> Load(const VulkanContext& context, const std::string& path);
-
     // A texture from pixels in memory: width x height pixels of 4 bytes (red, green, blue,
-    // alpha), row after row from the top-left corner.
+    // alpha), row after row from the top-left corner. Renderer::CreateTexture checks that the
+    // sizes add up before calling this, and image files are decoded before they get here.
     static std::unique_ptr<Texture> Create(const VulkanContext& context, uint32_t width, uint32_t height,
                                            std::span<const uint8_t> pixels);
 

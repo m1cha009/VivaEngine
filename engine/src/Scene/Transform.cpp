@@ -81,4 +81,23 @@ void Transform::SetParent(Transform* parent)
         m_Parent->m_Children.push_back(this);
 }
 
+Transform* Transform::Find(std::string_view path) const
+{
+    // Split the path at its first "/": the name to look for here, and the rest for that child to
+    // find below itself. A std::string_view is a view of characters stored elsewhere, so cutting
+    // it into pieces copies nothing.
+    const size_t slash = path.find('/');
+    const std::string_view name = path.substr(0, slash);
+    for (Transform* child : m_Children) {
+        if (child->m_GameObject->GetName() != name)
+            continue;
+        if (slash == std::string_view::npos)
+            return child;
+        // If the rest of the path isn't below this child, another one with the same name may have it.
+        if (Transform* found = child->Find(path.substr(slash + 1)))
+            return found;
+    }
+    return nullptr;
+}
+
 } // namespace Viva

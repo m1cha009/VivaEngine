@@ -76,8 +76,14 @@ void Scene::Render(Renderer& renderer)
         if (!gameObject->CanUpdate())
             continue;
         const MeshRenderer* meshRenderer = gameObject->GetComponent<MeshRenderer>();
-        if (meshRenderer && meshRenderer->Mesh && meshRenderer->Material)
-            renderer.Submit(meshRenderer->Mesh, meshRenderer->Material, gameObject->GetTransform().WorldMatrix());
+        if (!meshRenderer)
+            continue;
+        // Every part sits where the object is, so they share one world matrix.
+        const glm::mat4 world = gameObject->GetTransform().WorldMatrix();
+        for (const MeshPart& part : meshRenderer->Parts) {
+            if (part.Mesh && part.Material)
+                renderer.Submit(part.Mesh, part.Material, world);
+        }
     }
 }
 

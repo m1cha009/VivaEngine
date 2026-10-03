@@ -19,7 +19,7 @@ engines work.
 | Vulkan SDK | [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home); the installer sets `VULKAN_SDK` | LunarG Vulkan SDK with **System Global Installation** checked ([see below](#vulkan-sdk)) |
 | Git | any recent version | any recent version |
 
-You don't install the libraries by hand (SDL3, GLM, VMA, stb_image and Dear ImGui). CMake
+You don't install the libraries by hand (SDL3, GLM, VMA, stb_image, Dear ImGui and cgltf). CMake
 downloads pinned versions of them the first time you configure a preset, so that first configure
 needs internet access and takes a minute or so.
 
@@ -123,11 +123,11 @@ It costs nothing, because the repository is public and the workflow uses a stand
 
 | Folder | Contents |
 |---|---|
-| `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code), `Renderer/` (the only place for Vulkan) and `Scene/` (GameObjects, components, transforms). |
+| `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code), `Renderer/` (the only place for Vulkan) and `Scene/` (GameObjects, components, transforms, model loading). |
 | `sandbox/` | The `Sandbox` executable, a test app that uses the engine the way a game would |
 | `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation, asset copying |
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
-| `assets/` | Game assets: textures (from `scripts/make-textures.ps1`), later models |
+| `assets/` | Game assets: textures (from `scripts/make-textures.ps1`) and glTF models (credits in `assets/models/CREDITS.md`) |
 | `scripts/` | `build.cmd` and `package.cmd` (Windows builds), `make-textures.ps1` |
 | `.github/workflows/` | The macOS CI build |
 | `docs/` | Milestone explainers and the macOS checklist |

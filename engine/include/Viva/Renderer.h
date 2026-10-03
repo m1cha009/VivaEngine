@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 
 namespace Viva {
@@ -68,6 +69,10 @@ public:
     // Loads a PNG or JPEG from the assets folder, for example "textures/crate.png". Loading the
     // same name again, while the texture is still in use, returns the same texture.
     std::shared_ptr<Texture> LoadTexture(const std::string& assetName);
+    // A texture from pixels in memory: width x height pixels of 4 bytes (red, green, blue, alpha),
+    // row after row from the top-left corner. Like a Unity Texture2D filled with SetPixels32.
+    // Model::Load uses it for images stored inside model files.
+    std::shared_ptr<Texture> CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
     std::shared_ptr<Material> CreateMaterial(const MaterialSettings& settings);
 
     // Queues `mesh`, drawn with `material` and placed in the world by `transform` (its model
