@@ -93,18 +93,25 @@ jobs:
           echo "No linker warnings."
 
       - name: Run Sandbox
+        timeout-minutes: 2 # --quit-after counts game time; this is the hard limit if the app hangs
+        # The Sandbox opens a window, so --quit-after makes it end on its own after two seconds.
+        # The first lines of its output also become a notice on the run's summary page (and in
+        # the public API), which shows what macOS reported without opening the full log.
         run: |
-          ./build/macos-debug/bin/Sandbox
-          ./build/macos-release/bin/Sandbox
+          for config in debug release; do
+            ./build/macos-${config}/bin/Sandbox --quit-after 2 2>&1 | tee "run-${config}.log"
+            echo "::notice title=Sandbox ${config}::$(head -n 4 "run-${config}.log" | tr '\n' ' ')"
+          done
 
       - name: Check VIVA_ASSERT
+        timeout-minutes: 2
         # Debug: a failed assert must log and exit with code 1. Release: asserts compile away, so
-        # --test-assert does nothing and the exit code is 0.
+        # --test-assert does nothing, the app runs normally and the exit code is 0.
         run: |
           set +e
-          ./build/macos-debug/bin/Sandbox --test-assert
+          ./build/macos-debug/bin/Sandbox --test-assert --quit-after 2
           debugCode=$?
-          ./build/macos-release/bin/Sandbox --test-assert
+          ./build/macos-release/bin/Sandbox --test-assert --quit-after 2
           releaseCode=$?
           set -e
           echo "Exit codes: Debug ${debugCode} (expected 1), Release ${releaseCode} (expected 0)"

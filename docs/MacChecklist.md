@@ -35,3 +35,16 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       `BreakIntoDebuggerOrExit()`. CI can't check that part.
 - [ ] CLion opens the project through the `macos-debug` / `macos-release` presets with the
       default Apple Clang toolchain.
+
+## M1: Window, input, game loop
+
+- [ ] **(CI)** The window opens. SDL's Cocoa backend has to find the Vulkan loader for
+      `SDL_WINDOW_VULKAN`. It first looks for `vkGetInstanceProcAddr` already loaded in the
+      process, which our executable links.
+- [ ] Retina: the startup line reports twice as many pixels as points, for example
+      `1280x720 points, 2560x1440 pixels (display scale 2.00)`.
+- [ ] Keys are physical positions. The Command keys report as `Left Meta`/`Right Meta` (check
+      the names SDL gives them). Trackpad scrolling gives fractional wheel values.
+- [ ] Minimize (Cmd+M): CPU drops to about 0%, and restoring continues normally. Cmd+Q and the red
+      close button both shut down cleanly (exit code 0).
+- [ ] Dragging the window edge logs `Window resized to …` in pixels.

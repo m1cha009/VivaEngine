@@ -5,11 +5,15 @@
 # game references, except that nothing is loaded at runtime: the code ends up inside the .exe.
 
 add_library(VivaEngine STATIC
+    src/Core/Application.cpp
     src/Core/Assert.cpp
     src/Core/Log.cpp
+    src/Core/Time.cpp
     src/Core/Version.cpp
     src/Platform/Debugger.cpp
+    src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
+    src/Platform/Window.cpp
     src/Renderer/VulkanVersion.cpp)
 
 # include/ is the public API that games see. src/ is private to the engine.

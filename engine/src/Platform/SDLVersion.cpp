@@ -1,4 +1,4 @@
-#include "Viva/Version.h"
+#include "Platform/SDLVersion.h"
 
 #include <SDL3/SDL_version.h>
 

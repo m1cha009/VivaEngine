@@ -95,7 +95,7 @@ VivaEngine/
 **Naming and files:**
 - Everything lives in `namespace Viva`.
 - Types and functions use `PascalCase`; locals and parameters use `camelCase`.
-- Member variables use `m_Name`; constants use `kName`.
+- Member variables use `m_Name`; constants use `kName`; variables with static storage (file-local state in an anonymous namespace, static members) use `s_Name`.
 - One class per file pair, with matching names. Use `#pragma once`.
 
 **Ownership:**
@@ -238,8 +238,8 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M0 (project skeleton) done, awaiting Michail's review. Next up: M1.
-- **Verified on Windows:** M0, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Not yet verified in CLion.
+- **Current milestone:** M2 (Vulkan instance, validation, device) is next. Done: M0 and M1 (2026-10-03).
+- **Verified on Windows:** M0 and M1, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. M1's window was driven by an automated script (keys, mouse, minimize, resize, close). Not yet verified in CLion.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -274,3 +274,21 @@ Append one line per decision: date, decision, reason.
   - `Log` formats through `std::format_args` in `Log.cpp`, which cut the compile cost per logging file from about 0.5 s to under 0.1 s in Release. It adds a public `Log::Message(Level, ...)`, and `kMinLevel` is `constexpr`.
   - Asserts use `std::source_location`.
   - Deferred: a precompiled header (revisit when there are more files), and moving the SDL/Vulkan version functions out of the public API (M1).
+- 2026-10-03: Naming convention added for state with static storage: `s_Name` (file-local variables in anonymous namespaces, static members). The brief only covered `m_` and `k`.
+- 2026-10-03: M1 design:
+  - `Key` values are USB HID usage codes, so SDL scancodes convert with a cast and names come from `SDL_GetScancodeName` (`Platform/KeyNames.cpp`).
+  - `Input` and `Time` are Unity-style static classes, fed through `friend` access.
+  - `Window` is created by a factory function that returns nullptr on failure, and owns `SDL_Init`/`SDL_Quit`.
+  - `dt` is capped at 0.25 s, and the loop waits for events while minimized.
+  - The version banner moved into `Application::Run()`; the SDL and Vulkan version queries are private headers.
+  - The Sandbox's `--quit-after <seconds>` lets CI and scripted tests run it unattended.
+  - CI reports the Sandbox's first output lines as `::notice` annotations, which are readable through the public API (job logs need admin auth).
+- 2026-10-03: M1 `/simplify` pass:
+  - `Input` moved to `Platform/Input.cpp`, as the brief's layout says (`KeyNames.cpp` folded in). Its feed functions are free functions in the private `Platform/InputEvents.h` (`BeginInputFrame`, `ProcessInputEvent`), which replaces the `friend`s in the public header.
+  - `static_assert`s check that the `Key` values equal SDL's scancodes.
+  - `Window` asks SDL for the minimized flag. `WaitForEvent()` waits without dequeuing, so key presses that arrive with a restore aren't lost.
+  - The FPS title moved from the engine into the sandbox via `Application::SetWindowTitle`.
+  - `m_QuitRequested` replaces `m_Running`.
+  - `Time::DeltaTime()` returns the fixed step inside `OnFixedUpdate` (as in Unity), and `SetFixedDeltaTime` asserts a positive step.
+  - CI's run steps get a 2-minute timeout.
+  - Skipped: a 1 ms sleep until M3's vsync (documented as a limitation), and `Extent` → `glm::uvec2`.
