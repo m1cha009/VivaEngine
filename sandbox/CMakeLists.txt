@@ -1,5 +1,6 @@
 # The sandbox: an executable that uses the engine the way a game would.
 add_executable(Sandbox
+    src/DemoScene.cpp
     src/FlyCamera.cpp
     src/Main.cpp)
 
@@ -11,12 +12,12 @@ target_link_libraries(Sandbox PRIVATE VivaEngine)
 viva_set_warnings(Sandbox)
 
 # The game's own GLSL shaders, compiled to SPIR-V when the sandbox builds (see
-# cmake/Shaders.cmake). None yet: the renderer's shaders are listed in engine/CMakeLists.txt,
-# and the game gets its own once it decides what to draw (M8).
+# cmake/Shaders.cmake). None yet: every material uses the engine's Unlit shader (listed in
+# engine/CMakeLists.txt), and the renderer doesn't load game shaders yet.
 viva_compile_shaders(Sandbox)
 
-# The game's assets, copied next to the executable (see cmake/Assets.cmake). Until M8 the
-# renderer's demo scene is what loads these textures; from M8 on the game will.
+# The game's assets, copied next to the executable (see cmake/Assets.cmake). DemoScene loads
+# the textures with Renderer::LoadTexture.
 viva_copy_assets(Sandbox
     textures/checker.png
     textures/crate.png)

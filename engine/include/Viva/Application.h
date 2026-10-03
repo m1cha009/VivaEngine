@@ -8,8 +8,9 @@
 
 namespace Viva {
 
-// Declared, not defined: the game never sees these classes' definitions (they live in
-// src/Platform/ and src/Renderer/). A pointer or unique_ptr to a type only needs a declaration.
+// Declared, not defined: a pointer or unique_ptr to a type only needs a declaration. The game
+// never sees Window's definition (it lives in src/Platform/); Renderer's is public, in
+// Viva/Renderer.h, for the games that draw.
 class Renderer;
 class Window;
 
@@ -73,12 +74,17 @@ protected:
     // The camera the renderer draws from. Move it in OnUpdate.
     Camera& GetCamera() { return m_Camera; }
 
+    // The renderer: create meshes, textures and materials with it (from OnStart on), and submit
+    // what to draw each frame (in OnUpdate). See Viva/Renderer.h.
+    Renderer& GetRenderer() { return *m_Renderer; }
+
 private:
     ApplicationSettings m_Settings;
     Camera m_Camera;
     std::unique_ptr<Window> m_Window;
     // Declared after m_Window, so it's destroyed first: members are destroyed in reverse order,
-    // and the renderer's Vulkan surface belongs to the window.
+    // and the renderer's Vulkan surface belongs to the window. Both live until the Application
+    // itself is destroyed, after the game's own members (see ~Application).
     std::unique_ptr<Renderer> m_Renderer;
     bool m_QuitRequested = false;
 };

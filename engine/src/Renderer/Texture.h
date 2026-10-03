@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Renderer/GpuResource.h"
 #include "Renderer/Image.h"
 
 #include <vulkan/vulkan.h>
@@ -16,7 +17,7 @@ class VulkanContext;
 // A texture: an image in GPU memory with a full chain of mipmaps, plus the sampler that says how
 // shaders read it (filtering, repeating). Like a Unity Texture2D together with its import
 // settings.
-class Texture {
+class Texture : public GpuResource {
 public:
     // Loads a PNG or JPEG file. Returns nullptr (after logging why) if it can't.
     static std::unique_ptr<Texture> Load(const VulkanContext& context, const std::string& path);
@@ -27,10 +28,7 @@ public:
                                            std::span<const uint8_t> pixels);
 
     explicit Texture(VkDevice device); // creates nothing: use Load() or Create()
-    ~Texture();
-
-    Texture(const Texture&) = delete;
-    Texture& operator=(const Texture&) = delete;
+    ~Texture() override;
 
     VkImageView GetView() const { return m_Image->GetView(); }
     VkSampler GetSampler() const { return m_Sampler; }

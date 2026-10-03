@@ -1,7 +1,7 @@
 #version 450
 
-// Per draw: the texture to show, with its sampler. Descriptor set 1, binding 0
-// (engine/src/Renderer/TextureDescriptors.h).
+// Per material: the texture to show, with its sampler. Descriptor set 1, binding 0, which each
+// Material owns (engine/src/Renderer/Material.h).
 layout(set = 1, binding = 0) uniform sampler2D albedo;
 
 // From the vertex shader, blended across the triangle.

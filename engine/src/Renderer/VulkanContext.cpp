@@ -479,17 +479,6 @@ void VulkanContext::CreateAllocator()
     VK_CHECK(vmaCreateAllocator(&info, &m_Allocator));
 }
 
-void VulkanContext::LogMemoryUsage() const
-{
-    // A "block" is one vkAllocateMemory; VMA places many buffers ("allocations") inside each. It
-    // keeps an emptied block for reuse, like the one the staging buffers used.
-    VmaTotalStatistics stats {};
-    vmaCalculateStatistics(m_Allocator, &stats);
-    const VmaStatistics& total = stats.total.statistics;
-    Log::Trace("GPU memory: {} allocation(s) using {} bytes, inside {} block(s) totalling {} MiB",
-               total.allocationCount, total.allocationBytes, total.blockCount, total.blockBytes / (1024 * 1024));
-}
-
 void VulkanContext::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& record) const
 {
     // A command pool and buffer just for this call. Creating them is cheap next to waiting for

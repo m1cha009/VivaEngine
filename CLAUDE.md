@@ -238,9 +238,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M8 (renderer abstraction) is next. Done: M0–M7 (2026-10-03).
-- **Verified on Windows:** M0–M7, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
-- **CI (macOS):** green through M6. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M9 (debug UI, Dear ImGui) is next. Done: M0–M8 (2026-10-03).
+- **Verified on Windows:** M0–M8, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
+- **CI (macOS):** green through M7. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -419,3 +419,39 @@ Append one line per decision: date, decision, reason.
   - Deferred to M11:
     - `DecodeImage(span)` split from `LoadImageFile`, for images embedded in .glb files;
     - a color-space parameter (sRGB vs UNORM) when the first data texture arrives.
+- 2026-10-03: M8 design (after its `/simplify` pass):
+  - Public API:
+    - `Viva/Renderer.h`, a pimpl: `Renderer::Impl` in Renderer.cpp holds all the state and logic, and the public functions forward to it.
+    - `CreateMesh`, `LoadTexture` (with a weak_ptr cache by name) and `CreateMaterial({ .Texture, .Color })` return `shared_ptr` to the opaque `Mesh`/`Texture`/`Material`.
+    - `Submit(mesh, material, transform)` is only valid while a frame is open; it asserts and is skipped otherwise.
+    - `BeginFrame`/`EndFrame`/`Create` are private, with `friend class Application`.
+    - Also public: `Viva/MeshData.h` and `Viva/Primitives.h` (`Cube`, `Plane`).
+  - Deferred deletion:
+    - `Impl::Track` gives each `shared_ptr` a deleter that parks the resource (`unique_ptr<GpuResource>`, virtual dtor) in the release list of the most recently begun frame (`m_ReleaseSlot`).
+    - `BeginFrame` destroys that list after the slot's fence (`std::exchange` handles cascades).
+    - At shutdown, after `vkDeviceWaitIdle`, releases destroy immediately (`m_DestroyNow`), and live resources are logged as an error in every build.
+    - The renderer and window are destroyed in `~Application`, after the game's members.
+  - Rendering:
+    - One `VkPipelineLayout` is owned by the renderer (set 0 camera, set 1 material texture, push constants model + color, 80 B, vertex stage). `PipelineSettings::Layout` is borrowed.
+    - Set 0 is bound once per frame. Draws are sorted by shader, material and mesh and bound on change (`Mesh::Bind`/`Draw`).
+    - `Material` owns its set 1 from `DescriptorAllocator` (pools of 64 with FREE_DESCRIPTOR_SET, newest first, a new pool when full) and frees it in its destructor.
+    - `Shader` is internal (only the default Unlit); public `LoadShader`/`MaterialSettings::Shader` were dropped until a second shader is needed.
+  - Main loop:
+    - `BeginFrame` (fence + acquire), then `PollEvents`, the updates, `EndFrame`, and finally `BeginInputFrame()`, so input flags survive passes that can't draw.
+    - Timed: with vsync the CPU waits 16–23 ms in `vkWaitForFences` versus 0.15 ms in present, so polling input after `BeginFrame` gains a refresh of latency.
+    - `Window::IsDrawable()` holds the "minimized or zero area" rule.
+  - The sandbox's `DemoScene` owns the scene content.
+  - The cubes lost M7's renderer-side gradient (`Primitives::Cube` is white).
+- 2026-10-03: M8 deferred items resolved:
+  - Done:
+    - BeginFrame before input (M3);
+    - Mesh bind/draw split and draw sorting, plus the shared layout (M6);
+    - per-frame `unique_ptr` deletion lists (M6);
+    - the growable, freeable descriptor allocator (M7);
+    - asset names resolved inside `LoadTexture` (M7).
+  - Kept as is: `FrameUniforms` stays a class instead of folding into `FrameData`, since that would make FrameResources depend on VMA and the allocator.
+  - Dropped: SPIR-V spans + `VkPipelineCache` (M4), unneeded with one pipeline.
+  - Re-deferred:
+    - Upload batching / in-frame uploads → when a game creates resources at runtime. A stress test showed per-frame creation halves the frame rate, because each ImmediateSubmit waits for the frame in flight.
+    - A sampler cache → M11 (glTF samplers).
+  - `VulkanContext::LogMemoryUsage` was removed (no caller). M9's stats can show `vmaGetHeapBudgets`.

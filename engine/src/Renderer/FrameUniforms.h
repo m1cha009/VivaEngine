@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Renderer/Buffer.h"
+#include "Renderer/DescriptorAllocator.h"
 #include "Renderer/FrameResources.h"
 
 #include <glm/mat4x4.hpp>
@@ -30,11 +31,13 @@ struct CameraUniforms {
 // Descriptors are how shaders find resources (buffers, textures):
 //   VkDescriptorSetLayout  The shape: "binding 0 is a uniform buffer the vertex shader reads".
 //                          Pipelines are built against it.
-//   VkDescriptorPool       Memory that descriptor sets are allocated from.
+//   VkDescriptorPool       Memory that descriptor sets are allocated from (DescriptorAllocator).
 //   VkDescriptorSet        An actual set: "binding 0 is this buffer". Bound before drawing.
 class FrameUniforms {
 public:
-    static std::unique_ptr<FrameUniforms> Create(const VulkanContext& context);
+    // The sets come from `descriptors`. They live as long as the renderer, so they're never given
+    // back one by one: destroying the allocator's pools frees them.
+    static std::unique_ptr<FrameUniforms> Create(const VulkanContext& context, DescriptorAllocator& descriptors);
 
     explicit FrameUniforms(VkDevice device); // creates nothing: use Create()
     ~FrameUniforms();
@@ -51,7 +54,6 @@ public:
 private:
     VkDevice m_Device = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_Layout = VK_NULL_HANDLE;
-    VkDescriptorPool m_Pool = VK_NULL_HANDLE;
     std::array<std::unique_ptr<Buffer>, FrameResources::kFramesInFlight> m_Buffers;
     std::array<VkDescriptorSet, FrameResources::kFramesInFlight> m_Sets {};
 };

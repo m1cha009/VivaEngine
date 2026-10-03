@@ -131,3 +131,13 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       (MoltenVK reports it), and the far floor stays fairly sharp.
 - [ ] `scripts/make-textures.ps1` is Windows-only. Nothing on the Mac needs it, since the PNGs are
       committed.
+
+## M8: Renderer abstraction
+
+- [ ] **(CI)** The Sandbox exits with code 0 after `--quit-after`: in Debug that includes the
+      shutdown check that every GPU resource was released before the renderer.
+- [ ] The scene looks the same as on Windows (the sandbox now builds it through the public API).
+- [ ] Minimize (Cmd+M) and restore with the new frame order (`BeginFrame` before input): the
+      loop sleeps while minimized and resumes cleanly, with no validation output.
+- [ ] The frame rate with vsync matches the display (60 or 120 Hz on ProMotion), and mouse look
+      feels at least as responsive as before.

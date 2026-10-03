@@ -138,15 +138,6 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
 
     auto pipeline = std::make_unique<Pipeline>(device);
 
-    const VkPipelineLayoutCreateInfo layoutInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = static_cast<uint32_t>(settings.DescriptorSetLayouts.size()),
-        .pSetLayouts = settings.DescriptorSetLayouts.data(),
-        .pushConstantRangeCount = static_cast<uint32_t>(settings.PushConstantRanges.size()),
-        .pPushConstantRanges = settings.PushConstantRanges.data(),
-    };
-    VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline->m_Layout));
-
     const VkGraphicsPipelineCreateInfo createInfo {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = &rendering,
@@ -160,7 +151,7 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
         .pDepthStencilState = &depthStencil,
         .pColorBlendState = &colorBlend,
         .pDynamicState = &dynamic,
-        .layout = pipeline->m_Layout,
+        .layout = settings.Layout,
     };
     VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline->m_Pipeline));
 
@@ -178,7 +169,6 @@ Pipeline::Pipeline(VkDevice device)
 Pipeline::~Pipeline()
 {
     vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
-    vkDestroyPipelineLayout(m_Device, m_Layout, nullptr);
 }
 
 } // namespace Viva

@@ -3,9 +3,9 @@
 #include "Platform/InputEvents.h"
 #include "Platform/SDLVersion.h"
 #include "Platform/Window.h"
-#include "Renderer/Renderer.h"
 #include "Renderer/VulkanVersion.h"
 #include "Viva/Log.h"
+#include "Viva/Renderer.h"
 #include "Viva/Time.h"
 #include "Viva/Version.h"
 
@@ -32,6 +32,11 @@ Application::Application(ApplicationSettings settings)
 
 // Defined here, not in the header: destroying the unique_ptrs needs the full definitions of
 // Window and Renderer, which only this file includes.
+//
+// This is where the renderer and the window are destroyed: members go in reverse order of
+// declaration, the renderer (all of Vulkan) first, then the window and SDL. It runs after the
+// game's own destructor, so the GPU resources a game keeps in its members (shared_ptrs to meshes,
+// materials...) have already been released when the renderer shuts down.
 Application::~Application() = default;
 
 int Application::Run()
@@ -54,16 +59,25 @@ int Application::Run()
     float fixedTimeAccumulator = 0.0f;
 
     while (!m_QuitRequested) {
-        BeginInputFrame();
+        // Wait for the GPU, and with vsync for the display, first. Input read right after that is
+        // as fresh as it can be by the time this frame is drawn. (Waiting at the end instead would
+        // let input sit unused for up to a whole refresh.)
+        const bool drawing = m_Renderer->BeginFrame();
+
+        // Input that arrived since the game's last update. (It's cleared after each update, not
+        // here, so a key press that arrives during a pass that can't draw isn't lost.)
         m_Window->PollEvents();
         if (m_Window->ShouldClose())
-            break;
+            m_QuitRequested = true;
 
-        if (m_Window->IsMinimized() || m_Window->GetPixelSize().IsEmpty()) {
-            // Nothing is visible (minimized, or dragged down to zero height), so don't spin at 100%
-            // CPU: sleep until an event arrives, such as the window being restored. The time spent
-            // like this doesn't count as a frame.
-            m_Window->WaitForEvent();
+        if (!drawing) {
+            // This frame can't be drawn. If nothing is visible (minimized, or dragged down to zero
+            // height), don't spin at 100% CPU: sleep until an event arrives, such as the window
+            // being restored. Otherwise the swapchain is being rebuilt; just go round again. The
+            // time spent like this doesn't count as a frame.
+            // (Asked again here, after PollEvents: the events may have just restored the window.)
+            if (!m_Window->IsDrawable() && !m_QuitRequested)
+                m_Window->WaitForEvent();
             previousTime = Clock::now();
             continue;
         }
@@ -86,18 +100,19 @@ int Application::Run()
         }
 
         Time::SetDeltaTime(dt);
-        OnUpdate(dt);
+        OnUpdate(dt); // the game updates and submits what to draw
 
-        // Last, like in Unity: draw the frame the game just updated. With vsync on, this is also
-        // where the loop waits for the display.
-        m_Renderer->DrawFrame(m_Camera);
+        // Last, like in Unity: draw the frame the game just updated. Once BeginFrame succeeded,
+        // EndFrame must follow, even when quitting: it submits the work that signals the frame's
+        // fence.
+        m_Renderer->EndFrame(m_Camera);
+
+        // The game has seen this frame's input: clear the "pressed/released this frame" flags and
+        // the mouse movement before collecting the next frame's.
+        BeginInputFrame();
     }
 
     OnShutdown();
-    // Tear down in reverse order of creation: the renderer (all of Vulkan), then the window and
-    // SDL. Each reset() runs the object's destructor right here.
-    m_Renderer.reset();
-    m_Window.reset();
     return EXIT_SUCCESS;
 }
 

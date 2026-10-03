@@ -10,9 +10,11 @@ layout(set = 0, binding = 0) uniform Camera {
     mat4 Projection;
 } camera;
 
-// Per draw: the object's model matrix, pushed right before each draw call.
+// Per draw, pushed right before each draw call: the object's model matrix and its material's
+// color (ObjectPushConstants in engine/src/Renderer/Renderer.cpp).
 layout(push_constant) uniform Object {
     mat4 Model;
+    vec4 Color;
 } object;
 
 // Per vertex, from the vertex buffer: these inputs match kVertexAttributes in
@@ -32,6 +34,7 @@ void main()
     // into clip space. The parentheses make each step a matrix times a vector; without them GLSL
     // would multiply the matrices together first, for every vertex, which is three times the work.
     gl_Position = camera.Projection * (camera.View * (object.Model * vec4(inPosition, 1.0)));
-    outColor = inColor;
+    // The material's color tints the vertex color; the fragment shader multiplies in the texture.
+    outColor = inColor * object.Color.rgb;
     outUV = inUV;
 }

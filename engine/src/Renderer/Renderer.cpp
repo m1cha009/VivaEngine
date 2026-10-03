@@ -1,31 +1,33 @@
-#include "Renderer/Renderer.h"
+#include "Viva/Renderer.h"
 
 #include "Platform/FileSystem.h"
+#include "Platform/Window.h"
+#include "Renderer/DescriptorAllocator.h"
 #include "Renderer/FrameResources.h"
 #include "Renderer/FrameUniforms.h"
+#include "Renderer/GpuResource.h"
 #include "Renderer/Image.h"
+#include "Renderer/Material.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/Pipeline.h"
+#include "Renderer/Shader.h"
 #include "Renderer/Swapchain.h"
 #include "Renderer/Texture.h"
-#include "Renderer/TextureDescriptors.h"
 #include "Renderer/VulkanCheck.h"
 #include "Renderer/VulkanContext.h"
 #include "Renderer/VulkanHelpers.h"
 #include "Viva/Assert.h"
 #include "Viva/Camera.h"
-#include "Viva/Time.h"
+#include "Viva/Log.h"
 
-#include <glm/geometric.hpp>
-#include <glm/gtc/constants.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/vec2.hpp>
-#include <glm/vec3.hpp>
-
-#include <array>
-#include <cmath>
+#include <algorithm>
+#include <cstdint>
+#include <functional>
+#include <iterator>
+#include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace Viva {
 
@@ -35,238 +37,280 @@ namespace {
 // to the screen).
 constexpr VkClearColorValue kClearColor { { 0.02f, 0.025f, 0.04f, 1.0f } };
 
-// The per-draw data: the object's model matrix, pushed with vkCmdPushConstants before each draw.
-// Push constants are the quickest way to hand a draw a little data; every GPU takes at least
-// 128 bytes of them, and a mat4 is 64.
-constexpr VkPushConstantRange kPushConstantRanges[] = {
-    { .stageFlags = VK_SHADER_STAGE_VERTEX_BIT, .offset = 0, .size = sizeof(glm::mat4) },
+// The per-draw data, pushed with vkCmdPushConstants right before each draw, laid out like
+// "push_constant uniform Object" in the shaders: the object's model matrix, then its material's
+// color. Push constants are the quickest way to hand a draw a little data; every GPU takes at
+// least 128 bytes of them, and this is 80.
+struct ObjectPushConstants {
+    glm::mat4 Model;
+    glm::vec4 Color;
+};
+constexpr VkPushConstantRange kPushConstantRange {
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    .offset = 0,
+    .size = sizeof(ObjectPushConstants),
 };
 
-// The demo scene's meshes, built around their own origin ("model space"). Every triangle lists
-// its corners counter-clockwise as seen from outside, which makes that side its front.
-
-// Adds a square as two triangles that share the diagonal from corner 0 to corner 2. The corners
-// must go counter-clockwise as seen from the side that should be the front.
-void AddQuad(MeshData& mesh, const std::array<Vertex, 4>& corners)
-{
-    const auto first = static_cast<uint32_t>(mesh.Vertices.size());
-    mesh.Vertices.insert(mesh.Vertices.end(), corners.begin(), corners.end());
-    mesh.Indices.insert(mesh.Indices.end(), { first, first + 1, first + 2, first, first + 2, first + 3 });
-}
-
-// A cube from -0.5 to 0.5 on every axis, with the whole texture on each face. colorFaces gives
-// every face its own color; otherwise they're white, which shows the texture as it is. A corner
-// belongs to three faces with different colors and UVs, so it's stored three times: 24 vertices,
-// 36 indices.
-MeshData Cube(bool colorFaces)
-{
-    // For each face: the direction it faces, and two directions along it (U and V) chosen so that
-    // cross(U, V) = Normal. Then the corners -U-V, +U-V, +U+V, -U+V go counter-clockwise when
-    // seen from outside.
-    struct Face {
-        glm::vec3 Normal;
-        glm::vec3 U;
-        glm::vec3 V;
-        glm::vec3 Color;
-    };
-    constexpr Face kFaces[] = {
-        { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.90f, 0.20f, 0.20f } },  // +X red
-        { { -1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.20f, 0.80f, 0.80f } }, // -X cyan
-        { { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.30f, 0.85f, 0.30f } },  // +Y green
-        { { 0.0f, -1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.80f, 0.30f, 0.80f } }, // -Y magenta
-        { { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.25f, 0.40f, 0.95f } },  // +Z blue
-        { { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.95f, 0.85f, 0.20f } }, // -Z yellow
-    };
-    constexpr glm::vec2 kCorners[] = { { -1.0f, -1.0f }, { 1.0f, -1.0f }, { 1.0f, 1.0f }, { -1.0f, 1.0f } };
-    // Each face is a little darker towards its first corner: a gentle gradient across it.
-    constexpr float kShades[] = { 0.7f, 0.85f, 1.0f, 0.85f };
-
-    MeshData mesh;
-    for (const Face& face : kFaces) {
-        const glm::vec3 color = colorFaces ? face.Color : glm::vec3(1.0f);
-        std::array<Vertex, 4> corners;
-        for (size_t i = 0; i < corners.size(); ++i) {
-            const glm::vec2 corner = kCorners[i];
-            // The corner from -1..1 along U and V becomes UV 0..1, with V flipped: the texture's
-            // top row (v = 0) goes at the +V edge.
-            corners[i] = {
-                .Position = 0.5f * (face.Normal + corner.x * face.U + corner.y * face.V),
-                .Color = color * kShades[i],
-                .UV = { (corner.x + 1.0f) / 2.0f, (1.0f - corner.y) / 2.0f },
-            };
-        }
-        AddQuad(mesh, corners);
-    }
-    return mesh;
-}
-
-// The floor: one square of size x size units on the ground (y = 0), centered on the origin. Its
-// UVs run past 1, so the texture repeats across it: once every 2 units.
-MeshData Floor(float size)
-{
-    const float half = size / 2.0f;
-    const float repeats = size / 2.0f;
-    constexpr glm::vec3 kWhite(1.0f);
-    // Seen from above (-Z at the top), these corners go top-left, bottom-left, bottom-right,
-    // top-right: counter-clockwise, so the floor's front faces up.
-    MeshData mesh;
-    AddQuad(mesh, { {
-        { .Position = { -half, 0.0f, -half }, .Color = kWhite, .UV = { 0.0f, 0.0f } },
-        { .Position = { -half, 0.0f, half }, .Color = kWhite, .UV = { 0.0f, repeats } },
-        { .Position = { half, 0.0f, half }, .Color = kWhite, .UV = { repeats, repeats } },
-        { .Position = { half, 0.0f, -half }, .Color = kWhite, .UV = { repeats, 0.0f } },
-    } });
-    return mesh;
-}
-
-// Model matrices place a mesh in the world. They're built here as translate * rotate * scale,
-// which applies to the mesh right to left: scale it, then turn it, then move it into place, just
-// like a Unity Transform's scale, rotation and position.
-
-// The crate in the middle: hovering above the floor and turning around a tilted axis.
-glm::mat4 SpinningCubeTransform(float seconds)
-{
-    glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
-    model = glm::rotate(model, 0.8f * seconds, glm::normalize(glm::vec3(0.4f, 1.0f, 0.2f)));
-    return glm::scale(model, glm::vec3(1.2f));
-}
-
-// Pillar i of `count`, standing in a ring around the middle: a cube mesh, stretched tall. The
-// ring is turned by half a step, so no pillar stands between the starting camera and the crate.
-glm::mat4 PillarTransform(int i, int count)
-{
-    const float angle = glm::two_pi<float>() * (static_cast<float>(i) + 0.5f) / static_cast<float>(count);
-    constexpr float kRadius = 6.0f;
-    constexpr float kHeight = 3.0f;
-    const glm::mat4 model = glm::translate(glm::mat4(1.0f),
-                                           glm::vec3(kRadius * std::cos(angle), kHeight / 2.0f, kRadius * std::sin(angle)));
-    return glm::scale(model, glm::vec3(0.6f, kHeight, 0.6f));
-}
-
-// Binds the texture the next draws sample: its descriptor set, as set 1. Set 0 (the camera)
-// stays bound.
-void BindTexture(VkCommandBuffer cmd, VkPipelineLayout layout, VkDescriptorSet textureSet)
-{
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 1, 1, &textureSet, 0, nullptr);
-}
-
-// Hands the next draw its model matrix, then draws the mesh.
-void DrawMesh(VkCommandBuffer cmd, VkPipelineLayout layout, const Mesh& mesh, const glm::mat4& model)
-{
-    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(model), &model);
-    mesh.Draw(cmd);
-}
+// One Submit: what to draw, with what, and where. Plain pointers are safe here: Submit only
+// works while a frame is being built, and anything released during the frame waits in a release
+// list until the GPU is done with it.
+struct DrawCommand {
+    const Viva::Shader* Shader = nullptr;
+    const Viva::Material* Material = nullptr;
+    const Viva::Mesh* Mesh = nullptr;
+    glm::mat4 Transform { 1.0f };
+};
 
 } // namespace
 
-// What the renderer draws until M8 hands that job to the game: meshes, and the textures they're
-// drawn with, each with its descriptor set (set 1).
-struct DemoScene {
-    std::unique_ptr<Mesh> CrateMesh;  // white faces: the crate texture as it is
-    std::unique_ptr<Mesh> PillarMesh; // colored faces, drawn with the white texture
-    std::unique_ptr<Mesh> FloorMesh;
-    std::unique_ptr<Texture> CrateTexture;
-    std::unique_ptr<Texture> FloorTexture;
-    std::unique_ptr<Texture> WhiteTexture; // 1x1 white: "no texture", only the vertex colors show
-    VkDescriptorSet CrateSet = VK_NULL_HANDLE;
-    VkDescriptorSet FloorSet = VK_NULL_HANDLE;
-    VkDescriptorSet WhiteSet = VK_NULL_HANDLE;
+// The renderer's state and logic, hidden from the public header (see Renderer.h). Renderer's
+// public functions just forward here.
+struct Renderer::Impl {
+public:
+    Impl(const Window& window, bool vsync);
+    ~Impl();
 
-    // Returns nullptr (after logging why) if a texture file can't be loaded.
-    static std::unique_ptr<DemoScene> Create(const VulkanContext& context, TextureDescriptors& textureDescriptors)
+    Impl(const Impl&) = delete;
+    Impl& operator=(const Impl&) = delete;
+
+    // The steps of Renderer::Create. Returns false (after logging why) if one fails.
+    bool Initialize();
+
+    std::shared_ptr<Mesh> CreateMesh(const MeshData& data);
+    std::shared_ptr<Texture> LoadTexture(const std::string& assetName);
+    std::shared_ptr<Material> CreateMaterial(const MaterialSettings& settings);
+    void Submit(const Mesh& mesh, const Material& material, const glm::mat4& transform);
+    bool BeginFrame();
+    void EndFrame(const Camera& camera);
+
+private:
+    std::shared_ptr<Shader> LoadShader(const std::string& name);
+    bool RecreateSwapchain();
+    void RecordDraws(VkCommandBuffer cmd);
+    static void DestroyReleased(FrameData& frame);
+
+    // Hands a new resource to the game as a std::shared_ptr. When the game lets go of the last
+    // reference, the shared_ptr's deleter runs; instead of deleting, it parks the resource in a
+    // frame's release list, to be destroyed once the GPU is done with that frame.
+    template<typename T>
+    std::shared_ptr<T> Track(std::unique_ptr<T> resource)
     {
-        auto scene = std::make_unique<DemoScene>();
-        scene->CrateTexture = Texture::Load(context, GetAssetPath("textures/crate.png"));
-        scene->FloorTexture = Texture::Load(context, GetAssetPath("textures/checker.png"));
-        if (!scene->CrateTexture || !scene->FloorTexture)
+        if (!resource)
             return nullptr;
-        constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
-        scene->WhiteTexture = Texture::Create(context, 1, 1, kWhitePixel);
-
-        scene->CrateSet = textureDescriptors.Allocate(*scene->CrateTexture);
-        scene->FloorSet = textureDescriptors.Allocate(*scene->FloorTexture);
-        scene->WhiteSet = textureDescriptors.Allocate(*scene->WhiteTexture);
-
-        scene->CrateMesh = Mesh::Create(context, Cube(false));
-        scene->PillarMesh = Mesh::Create(context, Cube(true));
-        scene->FloorMesh = Mesh::Create(context, Floor(24.0f));
-        return scene;
+        ++m_LiveResources;
+        return std::shared_ptr<T>(resource.release(), [this](T* released) {
+            --m_LiveResources;
+            std::unique_ptr<GpuResource> owned(released);
+            // Parked in the list of the newest frame that may still draw with it: the one being
+            // built, or the one just submitted. Shutting down, the GPU is idle, so `owned`
+            // destroys it right here instead.
+            if (!m_DestroyNow)
+                m_Frames->GetFrame(m_ReleaseSlot).ReleasedResources.push_back(std::move(owned));
+        });
     }
 
-    // Records the draws: per object, the texture to use (if it changes), the model matrix, the mesh.
-    void Draw(VkCommandBuffer cmd, VkPipelineLayout layout, float seconds) const
-    {
-        BindTexture(cmd, layout, FloorSet);
-        DrawMesh(cmd, layout, *FloorMesh, glm::mat4(1.0f)); // the identity matrix: the floor as built
+    // A reference member: another name for the Window that Application owns, which outlives us.
+    const Window& m_Window;
+    bool m_VSync = true;
 
-        BindTexture(cmd, layout, WhiteSet);
-        constexpr int kPillars = 8;
-        for (int i = 0; i < kPillars; ++i)
-            DrawMesh(cmd, layout, *PillarMesh, PillarTransform(i, kPillars));
+    // Declared in creation order, so they're destroyed in reverse: the context (with the device
+    // everything else was made from) last.
+    std::unique_ptr<VulkanContext> m_Context;
+    std::unique_ptr<DescriptorAllocator> m_Descriptors;
+    std::unique_ptr<FrameResources> m_Frames;
+    std::unique_ptr<FrameUniforms> m_Uniforms;                 // descriptor set 0: the camera
+    VkDescriptorSetLayout m_MaterialSetLayout = VK_NULL_HANDLE; // set 1: a material's texture
+    // What every pipeline's shaders receive besides vertices: set 0, set 1 and the push
+    // constants. One layout shared by all pipelines keeps descriptor sets bound across them.
+    VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+    std::unique_ptr<Swapchain> m_Swapchain;
+    std::unique_ptr<Image> m_DepthImage; // the swapchain images' size, so it's rebuilt with them
 
-        BindTexture(cmd, layout, CrateSet);
-        DrawMesh(cmd, layout, *CrateMesh, SpinningCubeTransform(seconds));
-    }
+    // The engine's defaults: the shader every material uses, and the texture for materials
+    // created without one.
+    std::shared_ptr<Shader> m_DefaultShader; // Unlit
+    std::shared_ptr<Texture> m_WhiteTexture; // 1x1 white: "no texture"
+    // Textures loaded by name, so loading one again shares it. A weak_ptr remembers an object
+    // without keeping it alive (C#'s WeakReference).
+    std::unordered_map<std::string, std::weak_ptr<Texture>> m_TextureCache;
+
+    std::vector<DrawCommand> m_DrawList; // this frame's Submits
+    int m_LiveResources = 0;             // handed to the game and not released yet
+    bool m_DestroyNow = false;           // shutting down: release means destroy
+
+    Extent m_SwapchainWindowSize;     // the window's pixel size when the swapchain was built
+    bool m_SwapchainOutdated = false; // set when Vulkan reports the swapchain no longer fits
+    bool m_FrameOpen = false;         // between a successful BeginFrame and its EndFrame
+    uint32_t m_FrameIndex = 0;        // the frame slot being built, or built next
+    uint32_t m_ReleaseSlot = 0;       // the frame slot of the newest frame begun
+    uint32_t m_ImageIndex = 0;        // the swapchain image BeginFrame acquired
 };
+
+// The public functions: Create, then forwarding to Impl.
 
 std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
 {
-    auto renderer = std::make_unique<Renderer>(window, vsync);
-
-    renderer->m_Context = VulkanContext::Create(window);
-    if (!renderer->m_Context)
+    auto renderer = std::make_unique<Renderer>();
+    renderer->m_Impl = std::make_unique<Impl>(window, vsync);
+    if (!renderer->m_Impl->Initialize())
         return nullptr;
-    const VulkanContext& context = *renderer->m_Context;
-
-    renderer->m_Frames = std::make_unique<FrameResources>(context.GetDevice(), context.GetGraphicsQueueFamily());
-    renderer->m_FrameUniforms = FrameUniforms::Create(context);
-    renderer->m_TextureDescriptors = TextureDescriptors::Create(context.GetDevice());
-    if (!renderer->RecreateSwapchain())
-        return nullptr;
-
-    // The pipeline reads Vertex from vertex buffers, gets the camera through descriptor set 0, a
-    // texture through set 1 and the model matrix as a push constant, tests depth and skips back
-    // faces.
-    const VkDescriptorSetLayout setLayouts[] = {
-        renderer->m_FrameUniforms->GetLayout(),      // set 0
-        renderer->m_TextureDescriptors->GetLayout(), // set 1
-    };
-    renderer->m_UnlitPipeline = Pipeline::Create(context.GetDevice(), {
-        .VertexShader = "Unlit.vert",
-        .FragmentShader = "Unlit.frag",
-        .VertexBindings = kVertexBindings,
-        .VertexAttributes = kVertexAttributes,
-        .DescriptorSetLayouts = setLayouts,
-        .PushConstantRanges = kPushConstantRanges,
-        .ColorFormat = renderer->m_Swapchain->GetFormat(),
-        .DepthFormat = VulkanContext::kDepthFormat,
-        .CullMode = VK_CULL_MODE_BACK_BIT,
-    });
-    if (!renderer->m_UnlitPipeline)
-        return nullptr;
-
-    renderer->m_Scene = DemoScene::Create(context, *renderer->m_TextureDescriptors);
-    if (!renderer->m_Scene)
-        return nullptr;
-    context.LogMemoryUsage();
     return renderer;
 }
 
-Renderer::Renderer(const Window& window, bool vsync)
+Renderer::Renderer() = default;
+Renderer::~Renderer() = default;
+
+std::shared_ptr<Mesh> Renderer::CreateMesh(const MeshData& data) { return m_Impl->CreateMesh(data); }
+std::shared_ptr<Texture> Renderer::LoadTexture(const std::string& assetName) { return m_Impl->LoadTexture(assetName); }
+std::shared_ptr<Material> Renderer::CreateMaterial(const MaterialSettings& settings) { return m_Impl->CreateMaterial(settings); }
+bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
+void Renderer::EndFrame(const Camera& camera) { m_Impl->EndFrame(camera); }
+
+void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
+                      const glm::mat4& transform)
+{
+    VIVA_ASSERT(mesh && material, "Submit needs a mesh and a material");
+    if (mesh && material)
+        m_Impl->Submit(*mesh, *material, transform);
+}
+
+// Impl.
+
+Renderer::Impl::Impl(const Window& window, bool vsync)
     : m_Window(window)
     , m_VSync(vsync)
 {
 }
 
-Renderer::~Renderer()
+Renderer::Impl::~Impl()
 {
-    // Wait until the GPU has finished all submitted work, so nothing below is destroyed while it's
-    // still in use. The destructor's body runs before the members are destroyed.
-    if (m_Context)
-        VK_CHECK(vkDeviceWaitIdle(m_Context->GetDevice()));
+    if (!m_Context)
+        return; // Initialize failed before anything was created
+    VkDevice device = m_Context->GetDevice();
+
+    // Wait until the GPU has finished all submitted work: then everything may be destroyed. From
+    // here on, a resource that's released is destroyed at once instead of parked (see Track),
+    // which also takes care of resources released by others (a material its texture).
+    VK_CHECK(vkDeviceWaitIdle(device));
+    m_DestroyNow = true;
+    m_DefaultShader.reset();
+    m_WhiteTexture.reset();
+    if (m_Frames) {
+        for (uint32_t i = 0; i < FrameResources::kFramesInFlight; ++i)
+            m_Frames->GetFrame(i).ReleasedResources.clear();
+    }
+
+    // A resource the game still holds now would be destroyed after the device, and its release
+    // would reach into this destroyed renderer: a bug in the game, for example a resource kept in
+    // a global variable. Logged in every build, because it crashes later.
+    if (m_LiveResources != 0) {
+        Log::Error("{} GPU resource(s) outlived the renderer", m_LiveResources);
+        VIVA_ASSERT(m_LiveResources == 0);
+    }
+
+    vkDestroyPipelineLayout(device, m_PipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, m_MaterialSetLayout, nullptr);
 }
 
-bool Renderer::RecreateSwapchain()
+bool Renderer::Impl::Initialize()
+{
+    m_Context = VulkanContext::Create(m_Window);
+    if (!m_Context)
+        return false;
+    VkDevice device = m_Context->GetDevice();
+
+    m_Descriptors = std::make_unique<DescriptorAllocator>(device);
+    m_Frames = std::make_unique<FrameResources>(device, m_Context->GetGraphicsQueueFamily());
+    m_Uniforms = FrameUniforms::Create(*m_Context, *m_Descriptors);
+
+    // Set 1, a material: one combined image sampler (its texture), read by the fragment shader as
+    // "layout(set = 1, binding = 0) uniform sampler2D albedo".
+    const VkDescriptorSetLayoutBinding materialBindings[] = {
+        {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    };
+    m_MaterialSetLayout = CreateDescriptorSetLayout(device, materialBindings);
+
+    // The pipeline layout every shader shares: the camera (set 0), the material (set 1) and the
+    // per-draw push constants.
+    const VkDescriptorSetLayout setLayouts[] = { m_Uniforms->GetLayout(), m_MaterialSetLayout };
+    const VkPipelineLayoutCreateInfo layoutInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = static_cast<uint32_t>(std::size(setLayouts)),
+        .pSetLayouts = setLayouts,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &kPushConstantRange,
+    };
+    VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &m_PipelineLayout));
+
+    if (!RecreateSwapchain())
+        return false;
+
+    m_DefaultShader = LoadShader("Unlit");
+    if (!m_DefaultShader)
+        return false;
+    constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
+    m_WhiteTexture = Track(Texture::Create(*m_Context, 1, 1, kWhitePixel));
+    return true;
+}
+
+std::shared_ptr<Mesh> Renderer::Impl::CreateMesh(const MeshData& data)
+{
+    if (data.Vertices.empty() || data.Indices.empty()) {
+        Log::Error("Can't create a mesh without vertices and indices");
+        return nullptr;
+    }
+    return Track(Mesh::Create(*m_Context, data));
+}
+
+std::shared_ptr<Texture> Renderer::Impl::LoadTexture(const std::string& assetName)
+{
+    // Already loaded and still in use? Then share it, like Unity's Resources.Load returning the
+    // same asset. lock() turns the weak_ptr into a shared_ptr, or null if the texture is gone.
+    std::weak_ptr<Texture>& cached = m_TextureCache[assetName];
+    if (std::shared_ptr<Texture> texture = cached.lock())
+        return texture;
+
+    std::shared_ptr<Texture> texture = Track(Texture::Load(*m_Context, GetAssetPath(assetName)));
+    cached = texture;
+    return texture;
+}
+
+std::shared_ptr<Shader> Renderer::Impl::LoadShader(const std::string& name)
+{
+    return Track(Shader::Create(m_Context->GetDevice(), {
+        .VertexShader = name + ".vert",
+        .FragmentShader = name + ".frag",
+        .VertexBindings = kVertexBindings,
+        .VertexAttributes = kVertexAttributes,
+        .Layout = m_PipelineLayout,
+        .ColorFormat = m_Swapchain->GetFormat(),
+        .DepthFormat = VulkanContext::kDepthFormat,
+        .CullMode = VK_CULL_MODE_BACK_BIT,
+    }));
+}
+
+std::shared_ptr<Material> Renderer::Impl::CreateMaterial(const MaterialSettings& settings)
+{
+    return Track(Material::Create(m_Context->GetDevice(), *m_Descriptors, m_MaterialSetLayout, m_DefaultShader,
+                                  settings.Texture ? settings.Texture : m_WhiteTexture, settings.Color));
+}
+
+void Renderer::Impl::Submit(const Mesh& mesh, const Material& material, const glm::mat4& transform)
+{
+    // Outside a frame, the draw list's plain pointers could outlive their resources (one released
+    // before the frame begins is destroyed by BeginFrame). Release builds skip such a draw.
+    VIVA_ASSERT(m_FrameOpen, "Submit only works while a frame is being built: call it from OnUpdate");
+    if (!m_FrameOpen)
+        return;
+    m_DrawList.push_back({ .Shader = &material.GetShader(), .Material = &material, .Mesh = &mesh, .Transform = transform });
+}
+
+bool Renderer::Impl::RecreateSwapchain()
 {
     // The GPU may still be using the old swapchain's images. Waiting until it's idle is the
     // simplest safe moment to replace them. It only happens on resize, so the pause doesn't matter.
@@ -278,8 +322,8 @@ bool Renderer::RecreateSwapchain()
     if (!swapchain)
         return false;
 
-    // Everything that draws into swapchain images is built for one format (M4's pipeline), so a
-    // rebuild must keep it. With the same surface it always does; this checks that assumption.
+    // Every pipeline is built for one color format, so a rebuild must keep it. With the same
+    // surface it always does; this checks that assumption.
     VIVA_ASSERT(!m_Swapchain || swapchain->GetFormat() == m_Swapchain->GetFormat(), "the swapchain's format changed");
 
     // The old swapchain is destroyed here, after the new one was built from it.
@@ -299,53 +343,77 @@ bool Renderer::RecreateSwapchain()
     return true;
 }
 
-void Renderer::DrawFrame(const Camera& camera)
+void Renderer::Impl::DestroyReleased(FrameData& frame)
 {
-    // Nothing to draw into while the window has no area. (Application already skips those frames;
-    // this guards the moment the window shrinks to nothing between two checks.)
-    const Extent size = m_Window.GetPixelSize();
-    if (size.IsEmpty())
-        return;
+    // Destroying a resource can release others it held (a material its texture), and those land
+    // in a release list, maybe this very one. So take the list out first: std::exchange puts an
+    // empty list in its place and returns the old one, whose resources are destroyed when
+    // `released` goes away at the end of this function.
+    std::vector<std::unique_ptr<GpuResource>> released = std::exchange(frame.ReleasedResources, {});
+}
+
+bool Renderer::Impl::BeginFrame()
+{
+    VIVA_ASSERT(!m_FrameOpen, "BeginFrame called twice without EndFrame");
+
+    // Nothing to draw into while the window is minimized or has no area.
+    if (!m_Window.IsDrawable())
+        return false;
 
     // A new window size, or a swapchain Vulkan reported as outdated, needs a new swapchain.
-    if ((size != m_SwapchainWindowSize || m_SwapchainOutdated) && !RecreateSwapchain())
-        return;
+    if ((m_Window.GetPixelSize() != m_SwapchainWindowSize || m_SwapchainOutdated) && !RecreateSwapchain())
+        return false;
 
     VkDevice device = m_Context->GetDevice();
     FrameData& frame = m_Frames->GetFrame(m_FrameIndex);
 
     // 1. Wait until the GPU has finished the last frame that used this slot (two frames ago).
     //    A fence is how the GPU tells the CPU "done". After this, the frame's command buffer,
-    //    semaphore and uniform buffer are free to reuse.
+    //    semaphore and uniform buffer are free to reuse, and the resources released back then
+    //    can't be in use any more: the GPU finishes frames in order.
     VK_CHECK(vkWaitForFences(device, 1, &frame.InFlight, VK_TRUE, UINT64_MAX));
+    DestroyReleased(frame);
 
-    // 2. Fill this frame's uniform buffer with the camera. The aspect ratio comes from the
-    //    swapchain, so the picture never stretches when the window is resized. The projection
-    //    follows OpenGL's convention, where clip space y points up; Vulkan's points down, so
-    //    flipping the y scale keeps +Y up on screen. (Unity does the same in
-    //    GL.GetGPUProjectionMatrix.)
-    const VkExtent2D extent = m_Swapchain->GetExtent();
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    glm::mat4 projection = camera.ProjectionMatrix(aspect);
-    projection[1][1] *= -1.0f;
-    m_FrameUniforms->Write(m_FrameIndex, { .View = camera.ViewMatrix(), .Projection = projection });
-
-    // 3. Ask the swapchain which image to draw into next. The call returns as soon as it knows the
+    // 2. Ask the swapchain which image to draw into next. The call returns as soon as it knows the
     //    index; the semaphore is signaled once the image is really free (the display may still be
     //    showing it).
-    uint32_t imageIndex = 0;
-    VkResult result = vkAcquireNextImageKHR(device, m_Swapchain->GetHandle(), UINT64_MAX, frame.ImageAcquired,
-                                            VK_NULL_HANDLE, &imageIndex);
+    const VkResult result = vkAcquireNextImageKHR(device, m_Swapchain->GetHandle(), UINT64_MAX, frame.ImageAcquired,
+                                                  VK_NULL_HANDLE, &m_ImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         m_SwapchainOutdated = true; // the window changed under us: rebuild next frame
-        return;
+        return false;
     }
     if (result != VK_SUBOPTIMAL_KHR) // "suboptimal" still works for this frame
         VK_CHECK(result);
 
-    // Reset the fence only now that work will certainly be submitted. Reset earlier, a "return"
-    // above would leave it unsignaled forever, and the next wait on it would never end.
+    // Reset the fence only now that EndFrame will certainly submit work that signals it. Reset
+    // earlier, a "return false" above would leave it unsignaled forever, and the next wait on it
+    // would never end.
     VK_CHECK(vkResetFences(device, 1, &frame.InFlight));
+
+    // This frame is now the newest that can draw with any resource: until the next BeginFrame,
+    // whatever the game releases waits in its list.
+    m_ReleaseSlot = m_FrameIndex;
+    m_FrameOpen = true;
+    return true;
+}
+
+void Renderer::Impl::EndFrame(const Camera& camera)
+{
+    VIVA_ASSERT(m_FrameOpen, "EndFrame without a successful BeginFrame");
+    VkDevice device = m_Context->GetDevice();
+    FrameData& frame = m_Frames->GetFrame(m_FrameIndex);
+
+    // 3. Fill this frame's uniform buffer with the camera (BeginFrame's fence wait made it free).
+    //    The aspect ratio comes from the swapchain, so the picture never stretches when the window
+    //    is resized. The projection follows OpenGL's convention, where clip space y points up;
+    //    Vulkan's points down, so flipping the y scale keeps +Y up on screen. (Unity does the same
+    //    in GL.GetGPUProjectionMatrix.)
+    const VkExtent2D extent = m_Swapchain->GetExtent();
+    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+    glm::mat4 projection = camera.ProjectionMatrix(aspect);
+    projection[1][1] *= -1.0f;
+    m_Uniforms->Write(m_FrameIndex, { .View = camera.ViewMatrix(), .Projection = projection });
 
     // 4. Record this frame's commands: make the images drawable, clear them and draw, make the
     //    color image presentable.
@@ -357,7 +425,7 @@ void Renderer::DrawFrame(const Camera& camera)
     };
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
-    const VkImage image = m_Swapchain->GetImage(imageIndex);
+    const VkImage image = m_Swapchain->GetImage(m_ImageIndex);
 
     // The old contents don't matter (we're about to clear), so the old layout is UNDEFINED. The
     // source stage is the one the "image acquired" semaphore wait applies to (see the submit), so
@@ -392,7 +460,7 @@ void Renderer::DrawFrame(const Camera& camera)
     // GPU skip writing it back to memory.
     const VkRenderingAttachmentInfo colorAttachment {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = m_Swapchain->GetImageView(imageIndex),
+        .imageView = m_Swapchain->GetImageView(m_ImageIndex),
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -449,7 +517,7 @@ void Renderer::DrawFrame(const Camera& camera)
 
     // 5. Submit the commands to the graphics queue. They wait for "image acquired" before the
     //    color-output stage, then signal "render finished" for presentation and the fence for us.
-    const VkSemaphore renderFinished = m_Frames->GetRenderFinished(imageIndex);
+    const VkSemaphore renderFinished = m_Frames->GetRenderFinished(m_ImageIndex);
     const VkSemaphoreSubmitInfo waitInfo {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
         .semaphore = frame.ImageAcquired,
@@ -484,27 +552,63 @@ void Renderer::DrawFrame(const Camera& camera)
         .pWaitSemaphores = &renderFinished,
         .swapchainCount = 1,
         .pSwapchains = &swapchain,
-        .pImageIndices = &imageIndex,
+        .pImageIndices = &m_ImageIndex,
     };
-    result = vkQueuePresentKHR(m_Context->GetPresentQueue(), &presentInfo);
+    const VkResult result = vkQueuePresentKHR(m_Context->GetPresentQueue(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         m_SwapchainOutdated = true;
     else
         VK_CHECK(result);
 
+    // The submits were used up by this frame; the next frame builds its own list.
+    m_DrawList.clear();
+    m_FrameOpen = false;
     m_FrameIndex = (m_FrameIndex + 1) % FrameResources::kFramesInFlight;
 }
 
-void Renderer::RecordDraws(VkCommandBuffer cmd)
+void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
 {
-    const VkPipelineLayout layout = m_UnlitPipeline->GetLayout();
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_UnlitPipeline->GetHandle());
+    // Sort the draws so that those sharing a shader, then a material, then a mesh come together:
+    // every switch costs a bind, so grouping saves binds. The order doesn't change the picture,
+    // because the depth buffer sorts out what's in front. std::less<> gives pointers a consistent
+    // order (the < operator on unrelated pointers isn't guaranteed to).
+    std::ranges::sort(m_DrawList, [](const DrawCommand& a, const DrawCommand& b) {
+        const std::less<> less;
+        if (a.Shader != b.Shader)
+            return less(a.Shader, b.Shader);
+        if (a.Material != b.Material)
+            return less(a.Material, b.Material);
+        return less(a.Mesh, b.Mesh);
+    });
 
-    // Set 0: this frame's camera. Bound once, it stays bound for every draw that follows.
-    const VkDescriptorSet cameraSet = m_FrameUniforms->GetSet(m_FrameIndex);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &cameraSet, 0, nullptr);
+    // Set 0, this frame's camera, is bound once for every draw. All pipelines share
+    // m_PipelineLayout, so it stays bound when the pipeline changes.
+    const VkDescriptorSet cameraSet = m_Uniforms->GetSet(m_FrameIndex);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &cameraSet, 0, nullptr);
 
-    m_Scene->Draw(cmd, layout, static_cast<float>(Time::SinceStart()));
+    const Shader* boundShader = nullptr;
+    const Material* boundMaterial = nullptr;
+    const Mesh* boundMesh = nullptr;
+    for (const DrawCommand& draw : m_DrawList) {
+        if (draw.Shader != boundShader) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.Shader->GetPipeline().GetHandle());
+            boundShader = draw.Shader;
+        }
+        if (draw.Material != boundMaterial) {
+            // Set 1: the material's texture.
+            const VkDescriptorSet materialSet = draw.Material->GetDescriptorSet();
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 1, 1, &materialSet, 0, nullptr);
+            boundMaterial = draw.Material;
+        }
+        if (draw.Mesh != boundMesh) {
+            draw.Mesh->Bind(cmd);
+            boundMesh = draw.Mesh;
+        }
+
+        const ObjectPushConstants constants { .Model = draw.Transform, .Color = draw.Material->GetColor() };
+        vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(constants), &constants);
+        draw.Mesh->Draw(cmd);
+    }
 }
 
 } // namespace Viva

@@ -78,32 +78,6 @@ VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, std::span<const
     return layout;
 }
 
-VkDescriptorPool CreateDescriptorPool(VkDevice device, uint32_t maxSets, std::span<const VkDescriptorPoolSize> sizes)
-{
-    const VkDescriptorPoolCreateInfo info {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = maxSets,
-        .poolSizeCount = static_cast<uint32_t>(sizes.size()),
-        .pPoolSizes = sizes.data(),
-    };
-    VkDescriptorPool pool = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateDescriptorPool(device, &info, nullptr, &pool));
-    return pool;
-}
-
-VkDescriptorSet AllocateDescriptorSet(VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout layout)
-{
-    const VkDescriptorSetAllocateInfo info {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = pool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &layout,
-    };
-    VkDescriptorSet set = VK_NULL_HANDLE;
-    VK_CHECK(vkAllocateDescriptorSets(device, &info, &set));
-    return set;
-}
-
 void WriteUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
                                   VkDeviceSize range)
 {

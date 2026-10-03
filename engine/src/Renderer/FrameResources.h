@@ -1,9 +1,12 @@
 #pragma once
 
+#include "Renderer/GpuResource.h"
+
 #include <vulkan/vulkan.h>
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace Viva {
@@ -20,6 +23,10 @@ struct FrameData {
     // Signaled (GPU to CPU) when the GPU has finished this frame's commands, so the CPU knows it
     // can reuse this frame's command buffer and semaphores.
     VkFence InFlight = VK_NULL_HANDLE;
+    // Resources the game let go of while this frame was being built. This frame (or an earlier
+    // one still in flight) may draw with them, so they're destroyed only after waiting for this
+    // frame's fence, the next time this frame slot comes around. (The deferred-deletion queue.)
+    std::vector<std::unique_ptr<GpuResource>> ReleasedResources;
 };
 
 // The frames in flight, plus the "render finished" semaphores that tell presentation when an

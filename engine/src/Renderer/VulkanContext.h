@@ -52,9 +52,6 @@ public:
     // The strongest anisotropic filtering samplers may use, or 0 if the GPU has none.
     float GetMaxSamplerAnisotropy() const { return m_MaxSamplerAnisotropy; }
 
-    // Logs how much GPU memory VMA has allocated, and how many buffers share it (Debug builds).
-    void LogMemoryUsage() const;
-
     // Records commands with `record`, runs them on the graphics queue and waits until the GPU has
     // finished them. For one-off work while loading, like copying data into GPU memory
     // (Buffer::CreateWithData). Waiting for the GPU makes it far too slow to use every frame.

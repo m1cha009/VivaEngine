@@ -10,6 +10,7 @@ add_library(VivaEngine STATIC
     src/Core/Camera.cpp
     src/Core/ImageFile.cpp
     src/Core/Log.cpp
+    src/Core/Primitives.cpp
     src/Core/Time.cpp
     src/Core/Version.cpp
     src/Platform/Debugger.cpp
@@ -18,15 +19,17 @@ add_library(VivaEngine STATIC
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp
     src/Renderer/Buffer.cpp
+    src/Renderer/DescriptorAllocator.cpp
     src/Renderer/FrameResources.cpp
     src/Renderer/FrameUniforms.cpp
     src/Renderer/Image.cpp
+    src/Renderer/Material.cpp
     src/Renderer/Mesh.cpp
     src/Renderer/Pipeline.cpp
     src/Renderer/Renderer.cpp
+    src/Renderer/Shader.cpp
     src/Renderer/Swapchain.cpp
     src/Renderer/Texture.cpp
-    src/Renderer/TextureDescriptors.cpp
     src/Renderer/VmaImplementation.cpp
     src/Renderer/VulkanCheck.cpp
     src/Renderer/VulkanContext.cpp

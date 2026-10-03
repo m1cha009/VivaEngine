@@ -22,14 +22,14 @@ struct PipelineSettings {
     // the vertex shader makes up its own vertices, like M4's triangle did.
     std::span<const VkVertexInputBindingDescription> VertexBindings;
     std::span<const VkVertexInputAttributeDescription> VertexAttributes;
-    // What the shaders receive besides vertices, which makes up the pipeline layout: descriptor
-    // sets (set 0, set 1, ... in this order) and push constant ranges.
-    std::span<const VkDescriptorSetLayout> DescriptorSetLayouts;
-    std::span<const VkPushConstantRange> PushConstantRanges;
+    // The pipeline layout: what the shaders receive besides vertices (descriptor sets, push
+    // constants). The pipeline uses it but doesn't own it: the renderer shares one layout among
+    // all its pipelines, so descriptor sets stay bound when the pipeline changes.
+    VkPipelineLayout Layout = VK_NULL_HANDLE;
     // The format of the image the pipeline draws into (the swapchain's).
     VkFormat ColorFormat = VK_FORMAT_UNDEFINED;
-    // The depth buffer's format. Set, it turns on depth testing: a pixel is only drawn if it's
-    // nearer than what's already there (Unity's "ZTest LEqual" + "ZWrite On").
+    // The depth buffer's format. Set, it turns on depth testing: a pixel is only drawn if it's at
+    // least as near as what's already there (Unity's "ZTest LEqual" + "ZWrite On").
     VkFormat DepthFormat = VK_FORMAT_UNDEFINED;
     // Which triangles to skip: VK_CULL_MODE_BACK_BIT skips those facing away from the camera
     // (Unity's "Cull Back"). Front faces are the ones whose corners appear counter-clockwise.
@@ -55,13 +55,9 @@ public:
     Pipeline& operator=(const Pipeline&) = delete;
 
     VkPipeline GetHandle() const { return m_Pipeline; }
-    VkPipelineLayout GetLayout() const { return m_Layout; }
 
 private:
     VkDevice m_Device = VK_NULL_HANDLE;
-    // The layout lists what the shaders get from outside besides vertices (descriptor sets, push
-    // constants). Binding descriptor sets and pushing constants both name the layout.
-    VkPipelineLayout m_Layout = VK_NULL_HANDLE;
     VkPipeline m_Pipeline = VK_NULL_HANDLE;
 };
 

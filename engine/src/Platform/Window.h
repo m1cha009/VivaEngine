@@ -55,6 +55,8 @@ public:
 
     bool ShouldClose() const { return m_ShouldClose; }
     bool IsMinimized() const;
+    // True when there's something to draw into: not minimized, and not dragged down to zero size.
+    bool IsDrawable() const { return !IsMinimized() && !GetPixelSize().IsEmpty(); }
 
     // The drawable size in pixels. On a high-DPI (Retina) screen this is larger than the size in
     // points the window was created with, and it's the size the renderer must use.

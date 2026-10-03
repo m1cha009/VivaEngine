@@ -1,6 +1,7 @@
 // The sandbox: a small test program that uses the engine the way a game would.
 // It includes only engine headers (Viva/...) and GLM, never SDL or Vulkan.
 
+#include "DemoScene.h"
 #include "FlyCamera.h"
 
 #include "Viva/Application.h"
@@ -43,6 +44,8 @@ protected:
         camera.Position = { 0.0f, 3.0f, 9.0f };
         camera.Pitch = glm::radians(-12.0f);
 
+        m_Scene.Load(GetRenderer());
+
         Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
                   "around. Esc quits.");
     }
@@ -50,6 +53,7 @@ protected:
     void OnUpdate(float dt) override
     {
         m_FlyCamera.Update(GetCamera(), dt);
+        m_Scene.Draw(GetRenderer(), static_cast<float>(Time::SinceStart()));
 
         const bool timeIsUp = m_QuitAfter > 0.0f && Time::SinceStart() >= m_QuitAfter;
         if (Input::GetKeyDown(Key::Escape) || timeIsUp)
@@ -79,6 +83,7 @@ protected:
     }
 
 private:
+    DemoScene m_Scene;
     FlyCamera m_FlyCamera;
     float m_QuitAfter = 0.0f;
     float m_SecondTimer = 0.0f;

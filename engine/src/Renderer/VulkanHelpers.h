@@ -21,12 +21,9 @@ VkSemaphore CreateBinarySemaphore(VkDevice device);
 // A view of a whole 2D image: all its mip levels, through `aspect` (color or depth).
 VkImageView CreateImageView(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspect);
 
-// Descriptor set layouts, pools and sets (see FrameUniforms.h for what they are).
+// Descriptor set layouts and sets (see FrameUniforms.h for what they are; DescriptorAllocator
+// hands out the sets).
 VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings);
-// A pool with room for `maxSets` sets, holding at most `sizes` descriptors of each type in total.
-VkDescriptorPool CreateDescriptorPool(VkDevice device, uint32_t maxSets, std::span<const VkDescriptorPoolSize> sizes);
-// One set with `layout`, from `pool`. It's freed when the pool is destroyed.
-VkDescriptorSet AllocateDescriptorSet(VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout layout);
 // Points one binding of `set` at a resource: a uniform buffer (its first `range` bytes), or an
 // image view with its sampler, which the image must be in `layout` for whenever it's sampled.
 void WriteUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
