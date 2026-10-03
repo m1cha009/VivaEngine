@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include <source_location>
+#include <string>
 
 namespace Viva {
 
@@ -11,6 +12,8 @@ namespace Viva {
 const char* VkResultName(VkResult result);
 const char* VkFormatName(VkFormat format);
 const char* VkPresentModeName(VkPresentModeKHR mode);
+// Flags give every bit that's set, joined by "|".
+std::string VkMemoryPropertyNames(VkMemoryPropertyFlags flags);
 
 namespace Detail {
 

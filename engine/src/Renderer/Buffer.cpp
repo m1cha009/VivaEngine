@@ -8,75 +8,35 @@
 
 namespace Viva {
 
-namespace {
-
-// A GPU offers its memory as a few "memory types", each with property flags:
-//   DEVICE_LOCAL   On the GPU itself (VRAM on a graphics card): the fastest for the GPU, but the
-//                  CPU usually can't touch it.
-//   HOST_VISIBLE   The CPU can map it (get a pointer to it) and write into it. Usually ordinary
-//                  RAM, which the GPU reads over the PCIe bus, so it's slower to draw from.
-//   HOST_COHERENT  The CPU's writes reach the GPU without an explicit "flush" call.
-// (In Debug builds the log lists this GPU's memory types at startup.) A buffer reports which types
-// it can live in as a bit mask, allowedTypes; we pick the first of those with all the properties
-// we want.
-uint32_t FindMemoryType(VkPhysicalDevice gpu, uint32_t allowedTypes, VkMemoryPropertyFlags properties)
-{
-    VkPhysicalDeviceMemoryProperties memory {};
-    vkGetPhysicalDeviceMemoryProperties(gpu, &memory);
-    for (uint32_t i = 0; i < memory.memoryTypeCount; ++i) {
-        const bool allowed = (allowedTypes & (1u << i)) != 0;
-        const bool hasProperties = (memory.memoryTypes[i].propertyFlags & properties) == properties;
-        if (allowed && hasProperties)
-            return i;
-    }
-    return UINT32_MAX;
-}
-
-} // namespace
-
 std::unique_ptr<Buffer> Buffer::Create(const VulkanContext& context, VkDeviceSize size, VkBufferUsageFlags usage,
                                        MemoryLocation location)
 {
     VIVA_ASSERT(size > 0, "a Vulkan buffer can't be empty");
-    VkDevice device = context.GetDevice();
-    auto buffer = std::make_unique<Buffer>(device);
+    auto buffer = std::make_unique<Buffer>(context.GetAllocator());
     buffer->m_Size = size;
 
-    // 1. The buffer object: its size and what it will be used for. It has no memory yet.
+    // The buffer itself: its size and what it will be used for.
     const VkBufferCreateInfo bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
         .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE, // used by one queue family at a time
     };
-    VK_CHECK(vkCreateBuffer(device, &bufferInfo, nullptr, &buffer->m_Buffer));
 
-    // 2. The buffer says what memory it needs: how many bytes (can be more than its size), the
-    //    alignment, and which memory types it can live in.
-    VkMemoryRequirements requirements {};
-    vkGetBufferMemoryRequirements(device, buffer->m_Buffer, &requirements);
-
-    // 3. Pick a memory type with the right properties for the location, and allocate a block of it.
-    const VkMemoryPropertyFlags properties = location == MemoryLocation::Gpu
-        ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    const uint32_t memoryType = FindMemoryType(context.GetPhysicalDevice(), requirements.memoryTypeBits, properties);
-    VIVA_ASSERT(memoryType != UINT32_MAX, "no memory type has the properties this buffer needs");
-
-    const VkMemoryAllocateInfo allocateInfo {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = requirements.size,
-        .memoryTypeIndex = memoryType,
-    };
-    VK_CHECK(vkAllocateMemory(device, &allocateInfo, nullptr, &buffer->m_Memory));
-
-    // 4. Attach the memory to the buffer. Offset 0: the buffer gets the whole block.
-    VK_CHECK(vkBindBufferMemory(device, buffer->m_Buffer, buffer->m_Memory, 0));
-
-    // 5. Memory the CPU can see is mapped once and stays mapped: m_Mapped is the address where the
-    //    CPU sees it, and Write() copies straight there.
+    // Instead of naming memory properties, we tell VMA how the memory will be used, and it picks
+    // the best memory type on this GPU. AUTO: decide from the buffer's usage. For CpuToGpu we add
+    // that the CPU writes it front to back and never reads it (so uncached memory is fine), and
+    // that it should stay mapped for as long as it exists.
+    VmaAllocationCreateInfo allocationInfo { .usage = VMA_MEMORY_USAGE_AUTO };
     if (location == MemoryLocation::CpuToGpu)
-        VK_CHECK(vkMapMemory(device, buffer->m_Memory, 0, VK_WHOLE_SIZE, 0, &buffer->m_Mapped));
+        allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    // One call does all the manual steps: create the buffer, find a memory type, find room for it
+    // in one of VMA's blocks (allocating a new block only when they're full), and bind.
+    VmaAllocationInfo allocated {};
+    VK_CHECK(vmaCreateBuffer(buffer->m_Allocator, &bufferInfo, &allocationInfo, &buffer->m_Buffer,
+                             &buffer->m_Allocation, &allocated));
+    buffer->m_Mapped = allocated.pMappedData; // null unless mapped
     return buffer;
 }
 
@@ -125,24 +85,25 @@ std::unique_ptr<Buffer> Buffer::CreateWithData(const VulkanContext& context, std
     return buffer;
 }
 
-Buffer::Buffer(VkDevice device)
-    : m_Device(device)
+Buffer::Buffer(VmaAllocator allocator)
+    : m_Allocator(allocator)
 {
 }
 
 Buffer::~Buffer()
 {
-    // Freeing mapped memory unmaps it too.
-    vkDestroyBuffer(m_Device, m_Buffer, nullptr);
-    vkFreeMemory(m_Device, m_Memory, nullptr);
+    // Destroys the buffer and gives its place in the block back to VMA (unmapping it if mapped).
+    vmaDestroyBuffer(m_Allocator, m_Buffer, m_Allocation);
 }
 
 void Buffer::Write(std::span<const std::byte> data)
 {
     VIVA_ASSERT(m_Mapped, "only CpuToGpu buffers can be written by the CPU");
     VIVA_ASSERT(data.size() <= m_Size, "writing {} bytes into a {}-byte buffer", data.size(), m_Size);
-    // The memory is HOST_COHERENT, so the GPU sees these bytes without a flush.
     std::memcpy(m_Mapped, data.data(), data.size());
+    // VMA may have picked memory that isn't HOST_COHERENT. Then the CPU's writes only reach the
+    // GPU after a flush. On coherent memory this does nothing.
+    VK_CHECK(vmaFlushAllocation(m_Allocator, m_Allocation, 0, data.size()));
 }
 
 } // namespace Viva

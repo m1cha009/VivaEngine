@@ -94,3 +94,15 @@ real Mac: CLion, your own SDK install, a real GPU and window.
 - [ ] The triangle looks the same as on Windows: red at the top, blue bottom-left, green
       bottom-right. That's MoltenVK's view of Vulkan clip space, with y pointing down.
 - [ ] `--display 1` with a second monitor opens the window there.
+
+## M5: Buffers and GPU memory
+
+- [ ] **(CI)** VMA compiles with Apple Clang without warnings (its header is a SYSTEM include),
+      and the Sandbox runs with validation silent.
+- [ ] **Unified memory:** the Debug log's memory heaps should show one main heap, with memory
+      types that are `DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT` (MoltenVK may list a few more).
+      The staging upload still works there; it's just not strictly needed.
+- [ ] The three shapes look the same as on Windows. The hexagon's corners, starting at the right
+      and going clockwise: red, yellow, green, cyan, blue, magenta.
+- [ ] Quitting with Esc gives exit code 0 and no "Some allocations were not freed" assert (VMA's
+      leak check).

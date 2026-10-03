@@ -45,7 +45,17 @@ FetchContent_Declare(glm
     URL_HASH SHA256=1c0a0fced9b0d87c7b7bc94e40be490cff6d4c83c25db8488d8f33754e7fdeb2
     SYSTEM)
 
-FetchContent_MakeAvailable(SDL3 glm)
+# --- VMA (Vulkan Memory Allocator): GPU memory management -----------------------------------
+# AMD's library for allocating GPU memory, used by most Vulkan engines. Like GLM it's only
+# headers: one header file, whose implementation is compiled once in
+# engine/src/Renderer/VmaImplementation.cpp. Its target is GPUOpen::VulkanMemoryAllocator. (Inside
+# another project it adds no install rules, so it stays out of scripts/package.cmd's output.)
+FetchContent_Declare(VulkanMemoryAllocator
+    URL https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/refs/tags/v3.4.0.tar.gz
+    URL_HASH SHA256=822aa850c6ce77346ae96a8a1d351d52e77e85929f35363849a0a4e638e0a2a1
+    SYSTEM)
+
+FetchContent_MakeAvailable(SDL3 glm VulkanMemoryAllocator)
 
 # GLM's settings must be identical everywhere GLM is used, so they're attached to GLM's own
 # target: anything that links glm::glm gets them.

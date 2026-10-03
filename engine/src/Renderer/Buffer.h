@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
 #include <cstddef>
@@ -10,21 +11,25 @@ namespace Viva {
 
 class VulkanContext;
 
-// Where a buffer's memory lives, which decides who can use it quickly.
+// Who uses a buffer's memory, which decides where it should live.
 enum class MemoryLocation {
-    // GPU memory (VRAM on a graphics card): the fastest for drawing from, but usually out of the
-    // CPU's reach. The GPU fills it by copying from a staging buffer (see CreateWithData).
+    // Only the GPU: memory on the GPU itself (VRAM on a graphics card), the fastest to draw from
+    // but usually out of the CPU's reach. The GPU fills it by copying from a staging buffer (see
+    // CreateWithData).
     Gpu,
-    // Memory the CPU can write and the GPU can read, usually ordinary RAM that the GPU reads over
-    // the bus. For data in transit (staging buffers), or data the CPU rewrites often.
+    // The CPU writes, the GPU reads: memory the CPU can map. VMA picks where: ordinary RAM that
+    // the GPU reads over the bus (staging buffers), or, on GPUs that offer it, VRAM the CPU can
+    // write directly (good for small data rewritten every frame). For data in transit, or data
+    // the CPU changes often.
     CpuToGpu,
 };
 
 // A Vulkan buffer: a block of memory the GPU can use, holding vertices, indices, uniforms or
 // anything else. In Unity it hides inside Mesh and GraphicsBuffer.
 //
-// This version manages the memory by hand: it asks the buffer what memory it needs, picks a
-// suitable memory type, allocates it with vkAllocateMemory and binds it to the buffer.
+// Its memory comes from VMA (Vulkan Memory Allocator), which allocates big blocks of GPU memory
+// and places many buffers inside each one. (The first M5 commit does it all by hand, one
+// vkAllocateMemory per buffer: see docs/milestones/M5.md.)
 class Buffer {
 public:
     // A buffer of `size` bytes for `usage` (vertex buffer, index buffer, copy source...).
@@ -36,7 +41,7 @@ public:
     static std::unique_ptr<Buffer> CreateWithData(const VulkanContext& context, std::span<const std::byte> data,
                                                   VkBufferUsageFlags usage);
 
-    explicit Buffer(VkDevice device); // creates nothing: use Create()
+    explicit Buffer(VmaAllocator allocator); // creates nothing: use Create()
     ~Buffer();
 
     Buffer(const Buffer&) = delete;
@@ -49,9 +54,9 @@ public:
     void Write(std::span<const std::byte> data);
 
 private:
-    VkDevice m_Device = VK_NULL_HANDLE;
+    VmaAllocator m_Allocator = VK_NULL_HANDLE;
     VkBuffer m_Buffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_Memory = VK_NULL_HANDLE;
+    VmaAllocation m_Allocation = VK_NULL_HANDLE; // the buffer's place inside one of VMA's blocks
     VkDeviceSize m_Size = 0;
     void* m_Mapped = nullptr; // where the CPU sees a CpuToGpu buffer's memory; null for Gpu ones
 };

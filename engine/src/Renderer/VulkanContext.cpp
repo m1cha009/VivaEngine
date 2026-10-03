@@ -13,9 +13,7 @@
 #include <algorithm>
 #include <optional>
 #include <set>
-#include <string>
 #include <string_view>
-#include <utility>
 
 namespace Viva {
 
@@ -197,29 +195,14 @@ DeviceInfo CheckDevice(VkPhysicalDevice device, VkSurfaceKHR surface)
     return info;
 }
 
-// Memory properties as short names, like "DEVICE_LOCAL | HOST_VISIBLE" (Buffer.cpp explains them).
-std::string MemoryPropertyNames(VkMemoryPropertyFlags flags)
-{
-    constexpr std::pair<VkMemoryPropertyFlags, std::string_view> kNames[] = {
-        { VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, "DEVICE_LOCAL" },
-        { VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, "HOST_VISIBLE" },
-        { VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, "HOST_COHERENT" },
-        { VK_MEMORY_PROPERTY_HOST_CACHED_BIT, "HOST_CACHED" },
-        { VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, "LAZILY_ALLOCATED" },
-    };
-    std::string names;
-    for (const auto& [bit, name] : kNames) {
-        if ((flags & bit) == 0)
-            continue;
-        if (!names.empty())
-            names += " | ";
-        names += name;
-    }
-    return names.empty() ? "no special properties" : names;
-}
-
 // Lists the GPU's memory: its heaps (physical pools of memory, like VRAM and system RAM) and the
-// memory types in each (the ways that memory can be used).
+// memory types in each (the ways that memory can be used), with their property flags:
+//   DEVICE_LOCAL   On the GPU itself (VRAM on a graphics card): the fastest for the GPU, but the
+//                  CPU usually can't touch it.
+//   HOST_VISIBLE   The CPU can map it (get a pointer to it) and write into it. Usually ordinary
+//                  RAM, which the GPU reads over the PCIe bus, so it's slower to draw from.
+//   HOST_COHERENT  The CPU's writes reach the GPU without an explicit "flush" call.
+//   HOST_CACHED    The CPU caches it, which makes reading it back from the CPU fast.
 void LogMemoryHeaps(VkPhysicalDevice device)
 {
     VkPhysicalDeviceMemoryProperties memory {};
@@ -230,7 +213,7 @@ void LogMemoryHeaps(VkPhysicalDevice device)
         Log::Trace("Memory heap {}: {:.1f} GiB{}", heap, gib, onGpu ? ", on the GPU" : "");
         for (uint32_t type = 0; type < memory.memoryTypeCount; ++type) {
             if (memory.memoryTypes[type].heapIndex == heap)
-                Log::Trace("  memory type {}: {}", type, MemoryPropertyNames(memory.memoryTypes[type].propertyFlags));
+                Log::Trace("  memory type {}: {}", type, VkMemoryPropertyNames(memory.memoryTypes[type].propertyFlags));
         }
     }
 }
@@ -252,6 +235,7 @@ std::unique_ptr<VulkanContext> VulkanContext::Create(const Window& window)
 
     if (!context->PickPhysicalDevice() || !context->CreateDevice())
         return nullptr;
+    context->CreateAllocator();
     return context;
 }
 
@@ -259,6 +243,9 @@ std::unique_ptr<VulkanContext> VulkanContext::Create(const Window& window)
 // made before it (the device on the instance, the surface on the instance, and so on).
 VulkanContext::~VulkanContext()
 {
+    // In Debug builds VMA checks here that every buffer was destroyed, so a leak stops the program.
+    if (m_Allocator)
+        vmaDestroyAllocator(m_Allocator);
     if (m_Device)
         vkDestroyDevice(m_Device, nullptr);
     if (m_Surface)
@@ -463,6 +450,30 @@ bool VulkanContext::CreateDevice()
     vkGetDeviceQueue(m_Device, m_GraphicsQueueFamily, 0, &m_GraphicsQueue);
     vkGetDeviceQueue(m_Device, m_PresentQueueFamily, 0, &m_PresentQueue);
     return true;
+}
+
+void VulkanContext::CreateAllocator()
+{
+    // VMA needs the Vulkan objects it works with, and the Vulkan version we use (it calls newer
+    // functions when they're available). It finds the Vulkan functions themselves on its own.
+    const VmaAllocatorCreateInfo info {
+        .physicalDevice = m_PhysicalDevice,
+        .device = m_Device,
+        .instance = m_Instance,
+        .vulkanApiVersion = kApiVersion,
+    };
+    VK_CHECK(vmaCreateAllocator(&info, &m_Allocator));
+}
+
+void VulkanContext::LogMemoryUsage() const
+{
+    // A "block" is one vkAllocateMemory; VMA places many buffers ("allocations") inside each. It
+    // keeps an emptied block for reuse, like the one the staging buffers used.
+    VmaTotalStatistics stats {};
+    vmaCalculateStatistics(m_Allocator, &stats);
+    const VmaStatistics& total = stats.total.statistics;
+    Log::Trace("GPU memory: {} allocation(s) using {} bytes, inside {} block(s) totalling {} MiB",
+               total.allocationCount, total.allocationBytes, total.blockCount, total.blockBytes / (1024 * 1024));
 }
 
 void VulkanContext::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& record) const

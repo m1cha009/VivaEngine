@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
@@ -20,6 +21,7 @@ class Window;
 //   VkPhysicalDevice  The GPU we chose. It isn't created, only picked from a list.
 //   VkDevice          Our logical connection to that GPU, with the features we turned on.
 //   VkQueue           Where work is submitted: command buffers to run, images to present.
+//   VmaAllocator      VMA, the library that hands out GPU memory to buffers (and images, M7).
 class VulkanContext {
 public:
     // The Vulkan version the engine is written for. The instance asks for it, a GPU must support
@@ -44,6 +46,10 @@ public:
     VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
     uint32_t GetPresentQueueFamily() const { return m_PresentQueueFamily; }
     VkQueue GetPresentQueue() const { return m_PresentQueue; }
+    VmaAllocator GetAllocator() const { return m_Allocator; }
+
+    // Logs how much GPU memory VMA has allocated, and how many buffers share it (Debug builds).
+    void LogMemoryUsage() const;
 
     // Records commands with `record`, runs them on the graphics queue and waits until the GPU has
     // finished them. For one-off work while loading, like copying data into GPU memory
@@ -57,6 +63,7 @@ private:
     void CreateDebugMessenger();
     bool PickPhysicalDevice();
     bool CreateDevice();
+    void CreateAllocator();
 
     VkInstance m_Instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_DebugMessenger = VK_NULL_HANDLE;
@@ -67,6 +74,7 @@ private:
     uint32_t m_PresentQueueFamily = 0;
     VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
     VkQueue m_PresentQueue = VK_NULL_HANDLE;
+    VmaAllocator m_Allocator = VK_NULL_HANDLE;
 };
 
 } // namespace Viva

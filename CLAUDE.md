@@ -26,9 +26,9 @@
 | Vulkan version | Target **Vulkan 1.3 core**: dynamic rendering and synchronization2. **No `VkRenderPass` or `VkFramebuffer`.** |
 | Shaders | GLSL in `shaders/`, compiled to SPIR-V at build time with `glslc` (CMake custom command). `.spv` files are copied next to the executable. |
 | Math | GLM (FetchContent) with `GLM_FORCE_DEPTH_ZERO_TO_ONE` and `GLM_FORCE_RADIANS` |
+| GPU memory | Vulkan Memory Allocator (VMA) 3.4.0 (FetchContent, header-only, PRIVATE to the engine), since M5 |
 
 **Approved for later milestones** (add each only when its milestone arrives):
-- Vulkan Memory Allocator (VMA)
 - stb_image
 - Dear ImGui (SDL3 + Vulkan backends)
 - cgltf
@@ -238,9 +238,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M5 (buffers and GPU memory) is next. Done: M0–M4 (2026-10-03).
-- **Verified on Windows:** M0–M3, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Not yet verified in CLion.
-- **CI (macOS):** green through M2. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
+- **Current milestone:** M6 (3D: transforms, depth, camera) is next. Done: M0–M5 (2026-10-03).
+- **Verified on Windows:** M0–M5, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Not yet verified in CLion.
+- **CI (macOS):** green through M4. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -334,3 +334,23 @@ Append one line per decision: date, decision, reason.
   - `ReadBinaryFile` uses `SDL_LoadFile` with UTF-8 `std::string` paths. `std::filesystem::path::string()` can throw on MSVC for non-ASCII paths, which the no-exceptions engine must avoid.
   - Array counts use `std::size`.
   - Noted for M8: build pipelines from SPIR-V data (spans) rather than paths, and add a `VkPipelineCache` once there are many pipelines.
+- 2026-10-03: M5 design:
+  - Two commits. `e3f2681` allocates by hand: `FindMemoryType`, one `vkAllocateMemory` per buffer, persistent `vkMapMemory`. The second moves `Buffer` to VMA, so the diff shows exactly what VMA replaces.
+  - `Buffer::Create(context, size, usage, MemoryLocation)` takes `Gpu` or `CpuToGpu`. `CpuToGpu` buffers stay mapped, and `Write` is a memcpy plus `vmaFlushAllocation`. `CreateWithData` uploads through a staging buffer: `vkCmdCopyBuffer`, then a buffer barrier to ALL_COMMANDS/MEMORY_READ. That's broad, but it only runs at load time.
+  - `VulkanContext::ImmediateSubmit(std::function)` creates a transient pool and a fence per call, submits and waits. Load time only.
+  - `Mesh` holds a vertex and an index buffer (uint32 indices) and draws with `vkCmdDrawIndexed`.
+  - The `Vertex` layout is `inline constexpr` `kVertexBindings`/`kVertexAttributes` in `Mesh.h`, passed to `PipelineSettings` as spans.
+  - The `VertexColor` shaders replace M4's `Triangle` ones.
+  - VMA 3.4.0 comes from the GitHub tag archive, pinned by SHA-256, as `SYSTEM`, linked PRIVATE. It uses VMA's default function import, which statically links only Vulkan 1.0–1.3 functions; every 1.3 loader exports those.
+  - `VmaAllocator` lives in `VulkanContext`: created after the device, destroyed before it.
+  - `VmaImplementation.cpp` routes `VMA_ASSERT` to `VIVA_ASSERT`. VMA's leak check at shutdown then logs and exits like our asserts, which was verified with a deliberate leak.
+  - Debug builds log the memory heaps and types (`VkMemoryPropertyNames`), and VMA's statistics after loading.
+- 2026-10-03: M5 `/simplify` pass:
+  - The hand-written memory-flag name table became `VkMemoryPropertyNames()` in `VulkanCheck.cpp`. The SDK helper is complete and lives in one file.
+  - Kept: the explicit memcpy + flush in `Buffer::Write`, which teaches flushing (M6 writes through the mapped pointer every frame), and the fence in `ImmediateSubmit`.
+  - Deferred to M6: shared helpers for command pool/buffer, fence and submit. `FrameResources`, `ImmediateSubmit` and `DrawFrame` repeat that code. Put them in the same file as the image-barrier helper.
+  - Deferred to M8/M11:
+    - Batch uploads into one `ImmediateSubmit`. Today it's one blocking round trip per buffer, two per mesh.
+    - Never call `ImmediateSubmit` during gameplay: its fence wait also waits for the frames in flight.
+    - Move `Vertex`/`MeshData` to a header without Vulkan once the sandbox builds meshes.
+  - Noted for M9: a per-frame memory display should use `vmaGetHeapBudgets`. `vmaCalculateStatistics` is slow and meant for debugging.

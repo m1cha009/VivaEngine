@@ -13,6 +13,7 @@ namespace Viva {
 const char* VkResultName(VkResult result) { return string_VkResult(result); }
 const char* VkFormatName(VkFormat format) { return string_VkFormat(format); }
 const char* VkPresentModeName(VkPresentModeKHR mode) { return string_VkPresentModeKHR(mode); }
+std::string VkMemoryPropertyNames(VkMemoryPropertyFlags flags) { return string_VkMemoryPropertyFlags(flags); }
 
 namespace Detail {
 

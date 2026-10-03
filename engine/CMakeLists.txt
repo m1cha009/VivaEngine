@@ -21,6 +21,7 @@ add_library(VivaEngine STATIC
     src/Renderer/Pipeline.cpp
     src/Renderer/Renderer.cpp
     src/Renderer/Swapchain.cpp
+    src/Renderer/VmaImplementation.cpp
     src/Renderer/VulkanCheck.cpp
     src/Renderer/VulkanContext.cpp
     src/Renderer/VulkanVersion.cpp)
@@ -56,14 +57,14 @@ endif()
 
 # PUBLIC: games use GLM math types through the engine's API, so they get GLM's headers (and its
 # settings, see cmake/Dependencies.cmake) too.
-# PRIVATE: SDL3 and Vulkan are implementation details. Their headers aren't visible to games at
-# all, so the sandbox physically can't include them. (Inside the engine, "SDL only in Platform/,
-# Vulkan only in Renderer/" is a convention we follow, not something the build enforces.)
-# SDL3 and GLM are listed before Vulkan so their headers win if the Vulkan SDK was installed
-# with its optional SDL/GLM copies.
+# PRIVATE: SDL3, VMA and Vulkan are implementation details. Their headers aren't visible to games
+# at all, so the sandbox physically can't include them. (Inside the engine, "SDL only in
+# Platform/, Vulkan only in Renderer/" is a convention we follow, not something the build
+# enforces.) SDL3, GLM and VMA are listed before Vulkan so their headers win if the Vulkan SDK was
+# installed with its optional SDL/GLM/VMA copies.
 target_link_libraries(VivaEngine
     PUBLIC glm::glm
-    PRIVATE SDL3::SDL3-static Vulkan::Vulkan)
+    PRIVATE SDL3::SDL3-static GPUOpen::VulkanMemoryAllocator Vulkan::Vulkan)
 
 viva_set_warnings(VivaEngine)
 

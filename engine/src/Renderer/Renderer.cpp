@@ -143,6 +143,7 @@ std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
     for (const MeshData& data : { Triangle({ -0.6f, 0.0f }, 0.3f), Quad({ 0.0f, 0.0f }, 0.25f),
                                   Hexagon({ 0.6f, 0.0f }, 0.3f) })
         renderer->m_Meshes.push_back(Mesh::Create(*renderer->m_Context, data));
+    renderer->m_Context->LogMemoryUsage();
     return renderer;
 }
 
