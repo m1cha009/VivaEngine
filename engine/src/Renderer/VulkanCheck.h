@@ -6,9 +6,11 @@
 
 namespace Viva {
 
-// The name of a VkResult, such as "VK_ERROR_OUT_OF_DEVICE_MEMORY", for log messages. (It wraps
-// the SDK's string_VkResult, so only VulkanCheck.cpp includes that very large header.)
+// Names of Vulkan enum values, such as "VK_ERROR_OUT_OF_DEVICE_MEMORY", for log messages. (They
+// wrap the SDK's string_Vk... functions, so only VulkanCheck.cpp includes that very large header.)
 const char* VkResultName(VkResult result);
+const char* VkFormatName(VkFormat format);
+const char* VkPresentModeName(VkPresentModeKHR mode);
 
 namespace Detail {
 

@@ -43,7 +43,7 @@ int Application::Run()
     if (!m_Window)
         return EXIT_FAILURE;
 
-    m_Renderer = Renderer::Create(*m_Window);
+    m_Renderer = Renderer::Create(*m_Window, m_Settings.VSync);
     if (!m_Renderer)
         return EXIT_FAILURE;
 
@@ -59,9 +59,10 @@ int Application::Run()
         if (m_Window->ShouldClose())
             break;
 
-        if (m_Window->IsMinimized()) {
-            // Nothing is visible, so don't spin at 100% CPU: sleep until an event arrives (such as
-            // the window being restored). The time spent minimized doesn't count as a frame.
+        if (m_Window->IsMinimized() || m_Window->GetPixelSize().IsEmpty()) {
+            // Nothing is visible (minimized, or dragged down to zero height), so don't spin at 100%
+            // CPU: sleep until an event arrives, such as the window being restored. The time spent
+            // like this doesn't count as a frame.
             m_Window->WaitForEvent();
             previousTime = Clock::now();
             continue;
@@ -86,6 +87,10 @@ int Application::Run()
 
         Time::SetDeltaTime(dt);
         OnUpdate(dt);
+
+        // Last, like in Unity: draw the frame the game just updated. With vsync on, this is also
+        // where the loop waits for the display.
+        m_Renderer->DrawFrame();
     }
 
     OnShutdown();

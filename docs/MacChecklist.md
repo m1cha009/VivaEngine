@@ -63,3 +63,23 @@ real Mac: CLion, your own SDK install, a real GPU and window.
       macOS 26 or later; MoltenVK works on older versions. To force one, see the LunarG
       macOS guide (`VK_DRIVER_FILES`).
 - [ ] Check for `[Vulkan loader]` messages, and whether any of them should stay Info.
+- Already seen in CI (M2 run on the GitHub runner): the portability path works, with
+  `Apple Paravirtual device (integrated GPU), Vulkan 1.3.357, driver MoltenVK 1.4.2`, validation
+  on, and no errors.
+
+## M3: Swapchain and clear screen
+
+- [ ] **(CI)** The frame loop runs under MoltenVK without validation errors, including
+      synchronization validation.
+- [ ] Retina: the `Swapchain:` line shows the pixel size, twice the window's points (for example
+      2560x1440 for a 1280x720 window), and the colors look sharp, not upscaled.
+- [ ] The surface format is still an sRGB one (`B8G8R8A8_SRGB` or `R8G8B8A8_SRGB`), and the
+      colors look the same as on Windows.
+- [ ] Resize by dragging: macOS reports `currentExtent` either as the size or as "your choice"
+      (`0xFFFFFFFF`). Both paths should work, and there should be no endless rebuild loop (watch
+      the `[Trace] Swapchain:` lines).
+- [ ] Minimize (Cmd+M), restore, full screen (green button): no validation output.
+- [ ] Moving the window between a Retina and a non-Retina display rebuilds the swapchain at the
+      new pixel size.
+- [ ] `--no-vsync`: MoltenVK may not offer MAILBOX. The engine then tries IMMEDIATE, then falls
+      back to FIFO; check which one the log reports.

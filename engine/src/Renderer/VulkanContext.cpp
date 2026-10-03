@@ -74,12 +74,13 @@ bool HasExtension(const std::vector<VkExtensionProperties>& extensions, std::str
 }
 
 // Vulkan's two-call pattern: ask how many items there are, make room, then ask for the items.
-std::vector<VkExtensionProperties> GetInstanceExtensions()
+// With a layer name it lists the extensions that layer provides; without, the global ones.
+std::vector<VkExtensionProperties> GetInstanceExtensions(const char* layer = nullptr)
 {
     uint32_t count = 0;
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr));
+    VK_CHECK(vkEnumerateInstanceExtensionProperties(layer, &count, nullptr));
     std::vector<VkExtensionProperties> extensions(count);
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &count, extensions.data()));
+    VK_CHECK(vkEnumerateInstanceExtensionProperties(layer, &count, extensions.data()));
     return extensions;
 }
 
@@ -245,12 +246,19 @@ bool VulkanContext::CreateInstance(std::vector<const char*> extensions)
     }
 
     bool validation = false;
+    bool syncValidation = false;
     if (kEnableValidation) {
         if (HasValidationLayer() && HasExtension(available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
             layers.push_back(kValidationLayer);
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
             validation = true;
-            Log::Info("Vulkan validation layer enabled");
+            // The layer's own extension for configuring it from code, used below to turn on
+            // synchronization validation.
+            if (HasExtension(GetInstanceExtensions(kValidationLayer), VK_EXT_LAYER_SETTINGS_EXTENSION_NAME)) {
+                extensions.push_back(VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
+                syncValidation = true;
+            }
+            Log::Info("Vulkan validation layer enabled{}", syncValidation ? ", with synchronization validation" : "");
         } else {
             Log::Warn("Vulkan validation layer not found, running without it (it comes with the Vulkan SDK)");
         }
@@ -266,7 +274,28 @@ bool VulkanContext::CreateInstance(std::vector<const char*> extensions)
 
     // Giving vkCreateInstance the messenger's settings too means problems in vkCreateInstance and
     // vkDestroyInstance get reported, when the real messenger doesn't exist (yet, or anymore).
-    const VkDebugUtilsMessengerCreateInfoEXT debugInfo = DebugMessengerInfo();
+    VkDebugUtilsMessengerCreateInfoEXT debugInfo = DebugMessengerInfo();
+
+    // Synchronization validation, which is off by default: the layer then also checks that our
+    // barriers and semaphores order the GPU's reads and writes correctly. These settings hang off
+    // the messenger settings in the same pNext chain (the order in a chain doesn't matter: each
+    // struct is found by its sType).
+    const VkBool32 enabled = VK_TRUE;
+    const VkLayerSettingEXT syncSetting {
+        .pLayerName = kValidationLayer,
+        .pSettingName = "validate_sync",
+        .type = VK_LAYER_SETTING_TYPE_BOOL32_EXT,
+        .valueCount = 1,
+        .pValues = &enabled,
+    };
+    const VkLayerSettingsCreateInfoEXT layerSettings {
+        .sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+        .settingCount = 1,
+        .pSettings = &syncSetting,
+    };
+    if (syncValidation)
+        debugInfo.pNext = &layerSettings;
+
     const VkInstanceCreateInfo createInfo {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = validation ? &debugInfo : nullptr,

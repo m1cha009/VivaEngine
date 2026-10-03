@@ -14,7 +14,9 @@ add_library(VivaEngine STATIC
     src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp
+    src/Renderer/FrameResources.cpp
     src/Renderer/Renderer.cpp
+    src/Renderer/Swapchain.cpp
     src/Renderer/VulkanCheck.cpp
     src/Renderer/VulkanContext.cpp
     src/Renderer/VulkanVersion.cpp)

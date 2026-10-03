@@ -238,8 +238,9 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** M3 (swapchain and clear screen) is next. Done: M0, M1, M2 (2026-10-03).
-- **Verified on Windows:** M0, M1 and M2, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script (keys, mouse, minimize, resize, close). In M2, validation was silent through all of it. Not yet verified in CLion.
+- **Current milestone:** M4 (first triangle) is next. Done: M0, M1, M2, M3 (2026-10-03).
+- **Verified on Windows:** M0–M3, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script (keys, mouse, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Not yet verified in CLion.
+- **CI (macOS):** green through M2. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
 - **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -307,3 +308,18 @@ Append one line per decision: date, decision, reason.
   - Validation is selected by a `constexpr bool` instead of `#if`; with `#if`, Clang's Release build failed on an unused function.
   - The portability subset uses the SDK's `VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME` (from `vulkan_beta.h`).
   - CI treats "No suitable GPU found" on the runner as a warning, and checks asserts by log text.
+- 2026-10-03: M3 design:
+  - `Swapchain` (sRGB format; FIFO, or MAILBOX/IMMEDIATE when `VSync` is off; refuses 0×0) and `FrameResources` (2 frames in flight; "render finished" semaphores per swapchain image, only ever added) are separate classes owned by `Renderer`, declared after `m_Context`.
+  - `DrawFrame` = wait, acquire, record (sync2 barriers + dynamic rendering), submit2, present.
+  - The swapchain is rebuilt with `vkDeviceWaitIdle` when the window's pixel size differs from the last build's, or on OUT_OF_DATE/SUBOPTIMAL.
+  - Synchronization validation is on in Debug via `VK_EXT_layer_settings` (`validate_sync`).
+  - `ApplicationSettings::VSync`, and the sandbox's `--no-vsync`.
+- 2026-10-03: M3 `/simplify` pass:
+  - The loop sleeps when the window has no area (`Extent::IsEmpty`), not only when minimized; a zero-height window spun a core.
+  - The swapchain is logged once per build, at Info.
+  - The pNext chain for the layer settings hangs off the messenger settings.
+  - Members are declared in creation order (context, frames, swapchain).
+  - Rebuilds assert the swapchain format is unchanged, because pipelines are built for it.
+  - `Extent` has a defaulted `==`, and `std::numbers` replaces magic constants.
+  - Deferred to M6: a shared image-barrier helper taking a subresource range (depth aspect, mips).
+  - Deferred to M8: `BeginFrame` (fence wait + acquire) should run before input is polled. Today the vsync wait comes after `OnUpdate`, which adds up to one refresh of input latency.

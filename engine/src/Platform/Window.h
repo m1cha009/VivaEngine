@@ -23,6 +23,12 @@ namespace Viva {
 struct Extent {
     uint32_t Width = 0;
     uint32_t Height = 0;
+
+    bool IsEmpty() const { return Width == 0 || Height == 0; }
+
+    // "= default" asks the compiler to write == for us, comparing every field, like the value
+    // equality of a C# record. (C++20 also derives != from it.)
+    bool operator==(const Extent&) const = default;
 };
 
 // The game window: a thin wrapper around an SDL window. It also owns SDL itself, which is

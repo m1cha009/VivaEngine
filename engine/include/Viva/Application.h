@@ -17,6 +17,9 @@ struct ApplicationSettings {
     std::string Title = "VivaEngine";
     uint32_t Width = 1280;
     uint32_t Height = 720;
+    // Wait for the display's refresh between frames (no tearing, frame rate = refresh rate).
+    // Off: draw as fast as possible.
+    bool VSync = true;
 };
 
 // The base class of a game. It owns the window and the main loop. A game derives from it and
