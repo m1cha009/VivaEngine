@@ -63,6 +63,18 @@ public:
     // Ends the main loop after the current frame.
     void Quit();
 
+    // The renderer: create meshes, textures and materials with it (from OnStart on). See
+    // Viva/Renderer.h.
+    Renderer& GetRenderer() { return *m_Renderer; }
+    // The assets: meshes, textures, materials and models by name (see Viva/Assets.h), from OnStart
+    // on. Their names start in the assets folder next to the executable, unless SetAssetsFolder
+    // says otherwise. SetAssetsFolder replaces this object, so ask for it each time rather than
+    // keeping the reference.
+    Assets& GetAssets() { return *m_Assets; }
+    // The scene: the GameObjects that make up the game world, from OnStart to OnShutdown. It's
+    // drawn from its main camera every frame (see Viva/Scene.h).
+    Scene& GetScene() { return *m_Scene; }
+
 protected:
     // "virtual" means a derived class can replace the function, as in C#. Unlike C#, the
     // replacement is marked with "override" after the parameter list, not before the name.
@@ -99,21 +111,9 @@ protected:
     // like Unity's Edit mode, where scripts don't run.
     void SetSceneUpdating(bool updating) { m_SceneUpdating = updating; }
 
-    // The renderer: create meshes, textures and materials with it (from OnStart on). See
-    // Viva/Renderer.h.
-    Renderer& GetRenderer() { return *m_Renderer; }
-
-    // The assets: meshes, textures, materials and models by name (see Viva/Assets.h), from OnStart
-    // on. Their names start in the assets folder next to the executable, unless SetAssetsFolder
-    // says otherwise.
-    Assets& GetAssets() { return *m_Assets; }
     // Makes asset names start in `folder` (ending with a separator), for example a project's Assets
     // folder: a fresh Assets replaces the old one. What's loaded already stays while it's used.
     void SetAssetsFolder(const std::string& folder);
-
-    // The scene: the GameObjects that make up the game world, from OnStart to OnShutdown. It's
-    // drawn from its main camera every frame (see Viva/Scene.h).
-    Scene& GetScene() { return *m_Scene; }
 
 private:
     ApplicationSettings m_Settings;

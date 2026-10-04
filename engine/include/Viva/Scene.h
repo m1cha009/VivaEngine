@@ -31,6 +31,9 @@ public:
     // updates, before drawing (Unity's Destroy). Any pointer or reference to them is invalid after
     // that: the game must forget them.
     void Destroy(GameObject& gameObject);
+    // Removes a component from its GameObject, the same way: at the end of this frame's updates
+    // (Unity's Destroy(component)). The Transform isn't a component here, so it can't be removed.
+    void Destroy(Component& component);
     // Destroys every GameObject, the same way: they're gone at the end of this frame's updates.
     // Objects created after this call stay. Loading another scene file after it replaces the
     // scene (Unity's LoadScene in its default, single mode).
@@ -41,6 +44,16 @@ public:
     // gone: it's how code that keeps pointers to objects others may destroy (the debug windows'
     // Destroy button) can tell, like Unity's "== null" check on a destroyed object.
     bool Contains(const GameObject* gameObject) const;
+
+    // Creates a copy of `original` and of everything below it, below `parent` (or as a root
+    // object): the same name, active flag, Transform values and components, with the same field
+    // values. Unity's Instantiate(original, parent), and what its Duplicate command does.
+    //
+    // Like Unity's, it works through serialization: the original is written as it would be into
+    // a scene file, and the copy is read back from that, its meshes, textures and materials found
+    // through `assets`. So it copies exactly what a scene file would hold: components that aren't
+    // registered, and meshes and textures made in code, are left out (with a warning each).
+    GameObject& Instantiate(const GameObject& original, Assets& assets, GameObject* parent = nullptr);
 
     // The camera the frame is drawn from: the Camera of the first active GameObject that has one
     // (Unity's Camera.main). Without a camera, nothing in the scene is drawn.

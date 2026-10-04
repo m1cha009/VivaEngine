@@ -28,7 +28,7 @@ void GameObject::StartComponents()
 {
     for (size_t i = 0; i < m_Components.size() && CanUpdate(); ++i) {
         Component& component = *m_Components[i];
-        if (!component.m_Started) {
+        if (!component.m_Started && !component.m_Destroyed) {
             // Marked first, so a component started in this pass isn't started twice.
             component.m_Started = true;
             component.OnStart();
@@ -44,7 +44,7 @@ void GameObject::ForEachStartedComponent(Callback callback)
     // CanUpdate is asked again before each component: one may destroy or deactivate its own object.
     for (size_t i = 0; i < m_Components.size() && CanUpdate(); ++i) {
         Component& component = *m_Components[i];
-        if (component.m_Started)
+        if (component.m_Started && !component.m_Destroyed)
             callback(component);
     }
 }
@@ -63,6 +63,19 @@ void GameObject::LateUpdateComponents(float dt)
 void GameObject::FixedUpdateComponents(float fixedDt)
 {
     ForEachStartedComponent([fixedDt](Component& component) { component.OnFixedUpdate(fixedDt); });
+}
+
+void GameObject::RemoveDestroyedComponents()
+{
+    // Like Scene::RemoveDestroyed: out of the list first, then destroyed when `destroyed` goes at
+    // the end of the function, so a destructor that adds or removes components finds the list in
+    // one piece.
+    std::vector<std::unique_ptr<Component>> destroyed;
+    for (std::unique_ptr<Component>& component : m_Components) {
+        if (component->m_Destroyed)
+            destroyed.push_back(std::move(component));
+    }
+    std::erase(m_Components, nullptr);
 }
 
 void GameObject::MarkDestroyed()

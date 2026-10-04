@@ -29,6 +29,12 @@ void Scene::Destroy(GameObject& gameObject)
     gameObject.MarkDestroyed();
 }
 
+void Scene::Destroy(Component& component)
+{
+    VIVA_ASSERT(&component.GetGameObject().GetScene() == this, "Destroy: the component belongs to another scene");
+    component.m_Destroyed = true;
+}
+
 void Scene::Clear()
 {
     for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects)
@@ -129,6 +135,10 @@ void Scene::RemoveDestroyed()
             destroyed.push_back(std::move(gameObject));
     }
     std::erase(m_GameObjects, nullptr);
+
+    // The surviving objects' destroyed components. (Those of destroyed objects go with them.)
+    for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects)
+        gameObject->RemoveDestroyedComponents();
 
     // Leaving this function destroys `destroyed` and the GameObjects in it: their components (a
     // MeshRenderer lets go of its mesh and material, which the renderer frees once the GPU is done

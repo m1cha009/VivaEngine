@@ -1,4 +1,4 @@
-// Scene::Save and Scene::Load: scene files. A class's member functions can be defined in more than
+// Scene::Save and Scene::Load: scene files (and Scene::Instantiate, which copies through them). A class's member functions can be defined in more than
 // one .cpp file; these live apart from Scene.cpp because they're a topic of their own, and they
 // bring in JSON, the asset names and the component registry, which the rest of Scene doesn't need.
 
@@ -318,13 +318,13 @@ Json SaveGameObject(const GameObject& gameObject)
     return object;
 }
 
-// Creates the GameObject `json` describes, below `parent`, and everything below it. Returns how
-// many GameObjects it created.
-size_t LoadGameObject(Scene& scene, const Json& json, GameObject* parent, Assets& assets)
+// Creates the GameObject `json` describes, below `parent`, and everything below it. Returns it, or
+// nullptr if `json` isn't a GameObject.
+GameObject* LoadGameObject(Scene& scene, const Json& json, GameObject* parent, Assets& assets)
 {
     if (!json.IsObject()) {
         Log::Warn("Skipping a GameObject that isn't a JSON object");
-        return 0;
+        return nullptr;
     }
     const Json* name = json.Find("Name");
     GameObject& gameObject =
@@ -353,12 +353,11 @@ size_t LoadGameObject(Scene& scene, const Json& json, GameObject* parent, Assets
         }
     }
 
-    size_t created = 1;
     if (const Json* children = json.Find("Children"); children && children->AsArray()) {
         for (const Json& child : *children->AsArray())
-            created += LoadGameObject(scene, child, &gameObject, assets);
+            LoadGameObject(scene, child, &gameObject, assets);
     }
-    return created;
+    return &gameObject;
 }
 
 } // namespace
@@ -382,6 +381,13 @@ bool Scene::Save(const std::string& path) const
     return true;
 }
 
+GameObject& Scene::Instantiate(const GameObject& original, Assets& assets, GameObject* parent)
+{
+    // Into JSON and straight back out, without a file in between. Saving always gives an object,
+    // so loading it always makes one.
+    return *LoadGameObject(*this, SaveGameObject(original), parent, assets);
+}
+
 bool Scene::Load(const std::string& path, Assets& assets)
 {
     std::string error;
@@ -396,10 +402,11 @@ bool Scene::Load(const std::string& path, Assets& assets)
         return false;
     }
 
-    size_t created = 0;
+    // Every GameObject created is added to the end of m_GameObjects, so the growth is the count.
+    const size_t before = m_GameObjects.size();
     for (const Json& gameObject : *gameObjects->AsArray())
-        created += LoadGameObject(*this, gameObject, nullptr, assets);
-    Log::Info("Scene loaded: {} ({} GameObjects)", path, created);
+        LoadGameObject(*this, gameObject, nullptr, assets);
+    Log::Info("Scene loaded: {} ({} GameObjects)", path, m_GameObjects.size() - before);
     return true;
 }
 

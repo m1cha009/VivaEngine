@@ -103,16 +103,21 @@ every field through `FieldVisitor` (planned for M16) and Edit mode (`SetSceneUpd
 
 Goal 2's core: build a scene by hand.
 
-- [ ] **GameObject menu** (and right-click in the Hierarchy): Create Empty, Cube, Plane, Sphere,
+- [x] **GameObject menu** (and right-click in the Hierarchy): Create Empty, Cube, Plane, Sphere,
       Cylinder, Camera. New objects appear in front of the editor camera.
-- [ ] **Inspector:** name, active, Transform (position, rotation in degrees, scale),
+- [x] **Inspector:** name, active, Transform (position, rotation in degrees, scale),
       MeshRenderer (mesh, color, texture picked from `Assets/`), Camera, Add Component, Remove
-- [ ] **Hierarchy:** select, rename (F2), drag to reparent, Duplicate (Ctrl+D), Delete (Del)
-- [ ] **Click to select in the Scene view:** a ray from the mouse tested against each object's
+- [x] **Hierarchy:** select, rename (F2), drag to reparent, Duplicate (Ctrl+D), Delete (Del)
+- [x] **Click to select in the Scene view:** a ray from the mouse tested against each object's
       bounding box (mesh bounds are recorded when meshes are created), with the selection outlined
-- [ ] A grid on the ground plane
-- [ ] Save, close and reopen: the scene comes back as it was left
-- [ ] *You should see:* an empty scene turned into a little level made of cubes and planes
+- [x] A grid on the ground plane
+- [x] Save, close and reopen: the scene comes back as it was left
+- [x] *You should see:* an empty scene turned into a little level made of cubes and planes
+
+Done on 2026-10-04 (see [`milestones/M16.md`](milestones/M16.md)). Also in M16: an Edit menu with
+the same commands, models placed by double-clicking them in the Project window, `Scene::Instantiate`
+and `Scene::Destroy(Component&)` in the engine, and the outline drawn with ImGui's draw list (the
+way M17's gizmos will be drawn).
 
 ## M17: Gizmos and undo
 

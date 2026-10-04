@@ -111,6 +111,7 @@ public:
     bool IsVSync() const { return m_VSync; }
     void SetCamera(const glm::mat4& view, const glm::mat4& projection);
     void SetClearColor(const glm::vec3& color) { m_ClearColor = color; }
+    void DrawGrid() { m_DrawGrid = true; }
     float GetAspectRatio() const;
     void SetSceneTargetSize(uint32_t width, uint32_t height)
     {
@@ -131,6 +132,7 @@ private:
     void RecordRendering(VkCommandBuffer cmd, VkImageView color, const Image& depth, VkExtent2D extent,
                          const glm::vec3& clearColor, bool drawScene, bool drawUi);
     void RecordDraws(VkCommandBuffer cmd);
+    void RecordGrid(VkCommandBuffer cmd);
     void UpdateMemoryStats();
     static void DestroyReleased(FrameData& frame);
 
@@ -181,11 +183,13 @@ private:
     // The engine's defaults: the shader every material uses, and the texture for materials
     // created without one.
     std::shared_ptr<Shader> m_DefaultShader; // Unlit
+    std::shared_ptr<Shader> m_GridShader;    // for DrawGrid
     std::shared_ptr<Texture> m_WhiteTexture; // 1x1 white: "no texture"
 
     std::vector<DrawCommand> m_DrawList; // this frame's Submits
     CameraUniforms m_Camera {};          // from SetCamera
     glm::vec3 m_ClearColor { 0.0f };     // from SetClearColor
+    bool m_DrawGrid = false;             // DrawGrid was called this frame
     RenderStats m_Stats;                 // about the last frame drawn
     int m_LiveResources = 0;             // handed to the game and not released yet
     bool m_DestroyNow = false;           // shutting down: release means destroy
@@ -228,6 +232,8 @@ void Renderer::EndFrame() { m_Impl->EndFrame(); }
 const std::string& Renderer::GetAssetName(const Mesh& mesh) { return mesh.GetAssetName(); }
 const std::string& Renderer::GetAssetName(const Texture& texture) { return texture.GetAssetName(); }
 const MaterialSettings& Renderer::GetSettings(const Material& material) { return material.GetSettings(); }
+const Bounds& Renderer::GetBounds(const Mesh& mesh) { return mesh.GetBounds(); }
+void Renderer::DrawGrid() { m_Impl->DrawGrid(); }
 
 void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                       const glm::mat4& transform)
@@ -257,6 +263,7 @@ Renderer::Impl::~Impl()
     VK_CHECK(vkDeviceWaitIdle(device));
     m_DestroyNow = true;
     m_DefaultShader.reset();
+    m_GridShader.reset();
     m_WhiteTexture.reset();
     if (m_Frames) {
         for (uint32_t i = 0; i < FrameResources::kFramesInFlight; ++i)
@@ -315,6 +322,20 @@ bool Renderer::Impl::Initialize()
 
     m_DefaultShader = LoadShader("Unlit");
     if (!m_DefaultShader)
+        return false;
+    // The grid: no vertex buffer (the vertex shader makes its square), seen from both sides,
+    // see-through, and pulled slightly towards the camera so it shows on a floor at y = 0.
+    m_GridShader = Track(Shader::Create(device, {
+        .VertexShader = "Grid.vert",
+        .FragmentShader = "Grid.frag",
+        .Layout = m_PipelineLayout,
+        .ColorFormat = m_Swapchain->GetFormat(),
+        .DepthFormat = VulkanContext::kDepthFormat,
+        .DepthWrite = false,
+        .DepthBias = -1.0f,
+        .AlphaBlend = true,
+    }));
+    if (!m_GridShader)
         return false;
     constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
     m_WhiteTexture = CreateTexture(1, 1, kWhitePixel, {});
@@ -664,6 +685,7 @@ void Renderer::Impl::EndFrame()
 
     // The submits were used up by this frame; the next frame builds its own list.
     m_DrawList.clear();
+    m_DrawGrid = false;
     m_SceneTargetShown = false;
     m_FrameOpen = false;
     m_FrameIndex = (m_FrameIndex + 1) % FrameResources::kFramesInFlight;
@@ -730,8 +752,13 @@ void Renderer::Impl::RecordRendering(VkCommandBuffer cmd, VkImageView color, con
     const VkRect2D scissor { .extent = extent };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    if (drawScene)
+    if (drawScene) {
         RecordDraws(cmd);
+        // After everything solid: it's see-through, so it blends over what's already drawn, and the
+        // depth test hides it behind objects.
+        if (m_DrawGrid)
+            RecordGrid(cmd);
+    }
     // The debug UI goes last, so it's drawn over the scene. ImGui's pipeline doesn't test depth,
     // so the scene can't hide it.
     if (drawUi)
@@ -812,6 +839,15 @@ void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
         draw.Mesh->Draw(cmd);
         m_Stats.Triangles += draw.Mesh->GetIndexCount() / 3;
     }
+}
+
+void Renderer::Impl::RecordGrid(VkCommandBuffer cmd)
+{
+    // Everything the grid needs is in its shaders and the camera (set 0, still bound from
+    // RecordDraws): no vertex buffer, no material, no push constants. The vertex shader makes the
+    // square's 6 corners itself.
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GridShader->GetPipeline().GetHandle());
+    vkCmdDraw(cmd, 6, 1, 0, 0); // 6 vertices, 1 instance, from vertex 0, instance 0
 }
 
 } // namespace Viva

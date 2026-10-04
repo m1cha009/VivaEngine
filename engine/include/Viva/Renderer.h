@@ -95,6 +95,8 @@ public:
     static const std::string& GetAssetName(const Mesh& mesh);
     static const std::string& GetAssetName(const Texture& texture);
     static const MaterialSettings& GetSettings(const Material& material);
+    // The box a mesh's vertices lie in, in the mesh's own space (see Bounds in Viva/MeshData.h).
+    static const Bounds& GetBounds(const Mesh& mesh);
 
     // Queues `mesh`, drawn with `material` and placed in the world by `transform` (its model
     // matrix), for the frame being built. Like Unity's Graphics.DrawMesh: it lasts one frame, so
@@ -109,6 +111,10 @@ public:
     // The color each frame starts from, which shows wherever nothing is drawn: a linear color.
     // The scene sets it every frame from its main camera's BackgroundColor. Black until then.
     void SetClearColor(const glm::vec3& color);
+    // Draws the editor's ground grid this frame, like Unity's Scene view grid: lines one unit
+    // apart on the plane y = 0, every tenth one stronger, the X axis red and the Z axis blue,
+    // fading out with distance. It lasts one frame, like Submit, so call it every frame.
+    void DrawGrid();
     // The width of the image the scene is drawn into divided by its height: a camera's projection
     // needs it.
     float GetAspectRatio() const;

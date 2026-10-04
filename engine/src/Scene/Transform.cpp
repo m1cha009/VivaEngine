@@ -7,6 +7,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/matrix.hpp>
 
 namespace Viva {
 
@@ -88,19 +89,19 @@ void Transform::LookAt(const glm::vec3& worldPoint, const glm::vec3& worldUp)
     LocalRotation = m_Parent ? glm::inverse(m_Parent->GetRotation()) * worldRotation : worldRotation;
 }
 
-void Transform::SetParent(Transform* parent)
+void Transform::SetParent(Transform* parent, bool keepWorldPose)
 {
     if (parent == m_Parent)
         return;
 
-    // A transform can't go below itself or below one of its own children: the hierarchy would
-    // become a loop, and WorldMatrix would never finish. Release builds skip such a call.
-    bool wouldLoop = false;
-    for (const Transform* ancestor = parent; ancestor && !wouldLoop; ancestor = ancestor->m_Parent)
-        wouldLoop = ancestor == this;
-    VIVA_ASSERT(!wouldLoop, "SetParent would put {} below itself", m_GameObject->GetName());
-    if (wouldLoop)
+    // A loop in the hierarchy would make WorldMatrix never finish. Release builds skip such a call.
+    const bool allowed = CanSetParent(parent);
+    VIVA_ASSERT(allowed, "SetParent would put {} below itself", m_GameObject->GetName());
+    if (!allowed)
         return;
+
+    // Where it is now, before the parent changes, if it's to stay there.
+    const glm::mat4 world = keepWorldPose ? WorldMatrix() : glm::mat4(1.0f);
 
     // std::erase (C++20) removes every element equal to the value, like C#'s List.Remove.
     if (m_Parent)
@@ -108,6 +109,27 @@ void Transform::SetParent(Transform* parent)
     m_Parent = parent;
     if (m_Parent)
         m_Parent->m_Children.push_back(this);
+
+    // To stay put, the new local matrix must take the object to the same world matrix through the
+    // new parent: parent world * local = world, so local = inverse(parent world) * world.
+    if (keepWorldPose) {
+        const glm::mat4 local = m_Parent ? glm::inverse(m_Parent->WorldMatrix()) * world : world;
+        DecomposeMatrix(local, LocalPosition, LocalRotation, LocalScale);
+    }
+}
+
+bool Transform::CanSetParent(const Transform* parent) const
+{
+    return !parent || (parent != this && !parent->IsBelow(*this));
+}
+
+bool Transform::IsBelow(const Transform& ancestor) const
+{
+    for (const Transform* above = m_Parent; above; above = above->m_Parent) {
+        if (above == &ancestor)
+            return true;
+    }
+    return false;
 }
 
 Transform* Transform::Find(std::string_view path) const
@@ -127,6 +149,23 @@ Transform* Transform::Find(std::string_view path) const
             return found;
     }
     return nullptr;
+}
+
+void DecomposeMatrix(const glm::mat4& matrix, glm::vec3& position, glm::quat& rotation, glm::vec3& scale)
+{
+    // Column 3 is the position, and the first three columns are the object's axes, each as long
+    // as the scale along it (see GetPosition above).
+    position = glm::vec3(matrix[3]);
+    const glm::mat3 axes(matrix);
+    scale = { glm::length(axes[0]), glm::length(axes[1]), glm::length(axes[2]) };
+    // A negative determinant means the axes are mirrored, which a negative scale does.
+    if (glm::determinant(axes) < 0.0f)
+        scale.x = -scale.x;
+    // Divided by their scales, the axes are a pure rotation, which quat_cast turns into a
+    // quaternion. A zero scale squashes an axis to nothing, and the rotation can't be told; it
+    // keeps its value.
+    if (scale.x != 0.0f && scale.y != 0.0f && scale.z != 0.0f)
+        rotation = glm::quat_cast(glm::mat3(axes[0] / scale.x, axes[1] / scale.y, axes[2] / scale.z));
 }
 
 void Transform::VisitFields(FieldVisitor& fields)

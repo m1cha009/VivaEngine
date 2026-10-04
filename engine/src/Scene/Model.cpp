@@ -9,10 +9,7 @@
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
 
-#include <glm/geometric.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/mat3x3.hpp>
-#include <glm/matrix.hpp>
 
 // cgltf is a single header, like stb_image: this file defines CGLTF_IMPLEMENTATION, so cgltf's
 // code is compiled here, once.
@@ -113,19 +110,8 @@ void ReadTransform(const cgltf_node& node, glm::vec3& position, glm::quat& rotat
 {
     if (node.has_matrix) {
         // glTF stores a matrix column by column, as GLM does. It's taken apart into the three
-        // pieces: column 3 is the position, and the first three columns are the node's axes, each
-        // as long as the scale along it. (glTF only allows matrices that come apart this way.)
-        const glm::mat4 matrix = glm::make_mat4(node.matrix);
-        position = glm::vec3(matrix[3]);
-        const glm::mat3 axes(matrix);
-        scale = { glm::length(axes[0]), glm::length(axes[1]), glm::length(axes[2]) };
-        // A negative determinant means the axes are mirrored, which a negative scale does.
-        if (glm::determinant(axes) < 0.0f)
-            scale.x = -scale.x;
-        // Divided by their scales, the axes are a pure rotation, which quat_cast turns into a
-        // quaternion.
-        if (scale.x != 0.0f && scale.y != 0.0f && scale.z != 0.0f)
-            rotation = glm::quat_cast(glm::mat3(axes[0] / scale.x, axes[1] / scale.y, axes[2] / scale.z));
+        // pieces (glTF only allows matrices that come apart this way).
+        DecomposeMatrix(glm::make_mat4(node.matrix), position, rotation, scale);
         return;
     }
     if (node.has_translation)

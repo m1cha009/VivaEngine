@@ -15,17 +15,6 @@ using namespace Viva;
 
 namespace {
 
-// Copies text into an ImGui text buffer, cutting it short if it doesn't fit, and ends it with the
-// '\0' that marks the end of a C string. (A template on N, the buffer's size, so it fits any
-// std::array of chars.)
-template <size_t N>
-void CopyToBuffer(std::array<char, N>& buffer, const std::string& text)
-{
-    const size_t count = std::min(text.size(), N - 1);
-    std::copy_n(text.begin(), count, buffer.begin());
-    buffer[count] = '\0';
-}
-
 // "5 minutes ago", the way Unity Hub shows when a project was last opened. Relative times need no
 // time zone, which keeps them simple.
 std::string TimeAgo(int64_t moment)

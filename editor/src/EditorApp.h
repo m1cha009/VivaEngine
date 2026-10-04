@@ -1,8 +1,10 @@
 #pragma once
 
 #include "ConsoleWindow.h"
+#include "HierarchyWindow.h"
 #include "ProjectManager.h"
 #include "ProjectWindow.h"
+#include "SceneEditor.h"
 #include "SceneView.h"
 
 #include "Viva/Application.h"
@@ -12,10 +14,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-
-namespace Viva {
-class GameObject;
-}
 
 // What the editor does at startup (see main for the options).
 struct EditorOptions {
@@ -28,7 +26,8 @@ struct EditorOptions {
 // the Scene, Hierarchy, Inspector, Project and Console windows, docked into one layout.
 //
 // The scene being edited is the Application's own scene. The editor keeps it in Edit mode (its
-// components don't run) and draws it through its own camera, into the Scene window.
+// components don't run) and draws it through its own camera, into the Scene window. Every change
+// to it goes through the SceneEditor (M16).
 class EditorApp : public Viva::Application {
 public:
     EditorApp(Viva::ApplicationSettings settings, EditorOptions options);
@@ -70,6 +69,10 @@ private:
 
     void DrawEditor(float dt);
     void DrawMenuBar();
+    // An Edit menu command, on the selection: nothing without one.
+    void RunEditCommand(EditCommand command);
+    // A file double-clicked in the Project window: a scene opens, a model is placed.
+    void OpenFile(const std::string& path);
     void DrawSavePrompt();
     void UpdateTitle();
     std::string GetSceneName() const;
@@ -81,11 +84,12 @@ private:
     std::unique_ptr<ProjectManager> m_ProjectManager; // created in OnStart, when the settings folder is known
     std::optional<Viva::Project> m_Project;            // the open project, if any
 
-    std::string m_ScenePath;               // the scene's file, or "" for one never saved
-    bool m_SceneDirty = false;             // changed since it was loaded or saved
-    Viva::GameObject* m_Selection = nullptr;
+    std::string m_ScenePath; // the scene's file, or "" for one never saved
+    // The selection, unsaved changes, and every edit (created in OnStart, when the scene exists).
+    std::unique_ptr<SceneEditor> m_Editor;
 
     SceneView m_SceneView;
+    HierarchyWindow m_Hierarchy;
     ProjectWindow m_ProjectWindow;
     WindowVisibility m_Show;
     bool m_ResetLayout = false;

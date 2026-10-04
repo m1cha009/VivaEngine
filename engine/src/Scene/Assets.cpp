@@ -54,22 +54,42 @@ std::shared_ptr<Mesh> Assets::GetMesh(const std::string& name)
     return nullptr;
 }
 
+namespace {
+
+// The built-in primitives: each name, and the function that builds its mesh (a pointer to a
+// function, like a C# Func<MeshData>). The one list of them: a new primitive is one more line.
+struct Primitive {
+    const char* Name;
+    MeshData (*Build)();
+};
+constexpr Primitive kPrimitives[] = {
+    { "Primitives::Cube", &Primitives::Cube },
+    { "Primitives::Plane", &Primitives::Plane },
+    { "Primitives::Sphere", &Primitives::Sphere },
+    { "Primitives::Cylinder", &Primitives::Cylinder },
+};
+
+} // namespace
+
+const std::vector<std::string>& Assets::GetPrimitiveNames()
+{
+    static const std::vector<std::string> s_Names = [] {
+        std::vector<std::string> names;
+        for (const Primitive& primitive : kPrimitives)
+            names.emplace_back(primitive.Name);
+        return names;
+    }();
+    return s_Names;
+}
+
 std::shared_ptr<Mesh> Assets::CreatePrimitive(const std::string& name)
 {
-    MeshData data;
-    if (name == "Primitives::Cube")
-        data = Primitives::Cube();
-    else if (name == "Primitives::Plane")
-        data = Primitives::Plane();
-    else if (name == "Primitives::Sphere")
-        data = Primitives::Sphere();
-    else if (name == "Primitives::Cylinder")
-        data = Primitives::Cylinder();
-    else {
-        Log::Error("There's no primitive called {}", name);
-        return nullptr;
+    for (const Primitive& primitive : kPrimitives) {
+        if (name == primitive.Name)
+            return m_Renderer.CreateMesh(primitive.Build(), name);
     }
-    return m_Renderer.CreateMesh(data, name);
+    Log::Error("There's no primitive called {}", name);
+    return nullptr;
 }
 
 std::shared_ptr<Texture> Assets::GetTexture(const std::string& name)

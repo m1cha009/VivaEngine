@@ -8,6 +8,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 #include <algorithm>
+#include <cctype>
 
 namespace Viva {
 
@@ -55,6 +56,18 @@ std::string GetFileStem(std::string_view path)
     const size_t slash = normalized.rfind('/');
     const std::string name = slash == std::string::npos ? normalized : normalized.substr(slash + 1);
     return name.substr(0, name.rfind('.'));
+}
+
+std::string GetFileExtension(std::string_view path)
+{
+    const std::string normalized = NormalizePath(path);
+    const size_t dot = normalized.rfind('.');
+    if (dot == std::string::npos || normalized.find('/', dot) != std::string::npos)
+        return {}; // no dot, or only in a folder's name
+    std::string extension = normalized.substr(dot + 1);
+    for (char& c : extension)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return extension;
 }
 
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path)

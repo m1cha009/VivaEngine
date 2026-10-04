@@ -36,6 +36,8 @@ std::string NormalizePath(std::string_view path);
 
 // A file's name without its folder and its extension: "Main" for "C:/Game/Scenes/Main.scene".
 std::string GetFileStem(std::string_view path);
+// A file's extension in lower case, without the dot: "png" for "C:/Game/Crate.PNG", "" for none.
+std::string GetFileExtension(std::string_view path);
 
 // Reads a whole file into memory. Returns std::nullopt (after logging why) if it can't.
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path);

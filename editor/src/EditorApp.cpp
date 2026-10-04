@@ -7,7 +7,6 @@
 #include "Viva/Camera.h"
 #include "Viva/FileSystem.h"
 #include "Viva/GameObject.h"
-#include "Viva/Input.h"
 #include "Viva/Log.h"
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
@@ -80,6 +79,7 @@ void EditorApp::OnStart()
 
     // Edit mode: the scene is shown, but its components don't run, as in Unity before Play (M18).
     SetSceneUpdating(false);
+    m_Editor = std::make_unique<SceneEditor>(*this);
 
     if (!m_Options.OpenFolder.empty())
         OpenProject(NormalizePath(m_Options.OpenFolder));
@@ -110,7 +110,7 @@ void EditorApp::OnRender()
 
 bool EditorApp::OnQuitRequested()
 {
-    if (!m_Project || !m_SceneDirty)
+    if (!m_Project || !m_Editor->IsDirty())
         return true;
     AskToSaveThen([this] { Quit(); });
     return false;
@@ -192,8 +192,7 @@ void EditorApp::LoadScene(const std::string& path)
 void EditorApp::SceneReplaced(std::string path)
 {
     m_ScenePath = std::move(path);
-    m_SceneDirty = false;
-    m_Selection = nullptr;
+    m_Editor->SceneReplaced();
     m_SceneView.StartAtMainCamera(GetScene());
 }
 
@@ -207,7 +206,7 @@ void EditorApp::SaveScene(std::function<void()> then)
     }
     if (!GetScene().Save(m_ScenePath))
         return; // the Console says why; whatever was waiting on the save doesn't happen
-    m_SceneDirty = false;
+    m_Editor->MarkClean();
     m_ProjectWindow.Refresh();
     if (then)
         then();
@@ -232,7 +231,7 @@ void EditorApp::SaveSceneAs(std::function<void()> then)
 
 void EditorApp::AskToSaveThen(std::function<void()> action)
 {
-    if (!m_SceneDirty) {
+    if (!m_Editor->IsDirty()) {
         action();
         return;
     }
@@ -242,12 +241,7 @@ void EditorApp::AskToSaveThen(std::function<void()> action)
 
 void EditorApp::DrawEditor(float dt)
 {
-    Scene& scene = GetScene();
-    // The selection is forgotten once its object is gone. A raw pointer can't tell by itself, so
-    // the scene is asked (see Scene::Contains).
-    if (m_Selection && (!scene.Contains(m_Selection) || m_Selection->IsDestroyed()))
-        m_Selection = nullptr;
-
+    m_Editor->Update();
     DrawMenuBar();
     if (!m_Project)
         return; // the menu closed it
@@ -263,22 +257,26 @@ void EditorApp::DrawEditor(float dt)
 
     m_SceneView.Update(dt);
     if (m_Show.Scene)
-        m_SceneView.Draw(GetRenderer(), &m_Show.Scene);
+        m_SceneView.Draw(GetRenderer(), *m_Editor, &m_Show.Scene);
+    std::optional<EditCommand> command;
     if (m_Show.Hierarchy)
-        DrawHierarchyWindow(scene, m_Selection, &m_Show.Hierarchy);
+        command = m_Hierarchy.Draw(*m_Editor, m_SceneView.GetPlacement(), &m_Show.Hierarchy);
     if (m_Show.Inspector)
-        m_SceneDirty |= DrawInspectorWindow(m_Selection, GetAssets(), &m_Show.Inspector);
+        DrawInspectorWindow(*m_Editor, m_ProjectWindow.GetTextureNames(), &m_Show.Inspector);
     if (m_Show.Project) {
         if (const std::optional<std::string> path = m_ProjectWindow.Draw(&m_Show.Project))
-            OpenScene(*path);
+            OpenFile(*path);
     }
     if (m_Show.Console)
         m_Console.Draw(&m_Show.Console);
 
-    // F frames the selection in the Scene view. Input doesn't see the key while a text field has
-    // the keyboard (M9), so typing an F into a field doesn't move the camera.
-    if (m_Selection && Input::GetKeyDown(Key::F))
-        m_SceneView.Frame(*m_Selection);
+    // The Edit keys (F, F2, Del, Ctrl+D), as in Unity, while the Hierarchy or the Scene view has
+    // the focus: Del in another window's text field doesn't delete the selection. Commands run
+    // after the windows have drawn, so none of them changes the scene in the middle of a window.
+    if (!command && (m_Hierarchy.IsFocused() || m_SceneView.IsFocused()))
+        command = ReadEditShortcut();
+    if (command)
+        RunEditCommand(*command);
 
     DrawSavePrompt();
 }
@@ -310,6 +308,19 @@ void EditorApp::DrawMenuBar()
         ImGui::Separator();
         if (ImGui::MenuItem("Close Project"))
             AskToSaveThen([this] { CloseProject(); });
+        ImGui::EndMenu();
+    }
+    // Edit and GameObject, as in Unity. The Edit menu's items are shared with the Hierarchy's
+    // right-click menu (see EditorMenus.h).
+    if (ImGui::BeginMenu("Edit")) {
+        if (const std::optional<EditCommand> command = DrawEditMenuItems(m_Editor->GetSelection() != nullptr))
+            RunEditCommand(*command);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("GameObject")) {
+        // New objects go in front of the Scene view's camera, as root objects.
+        if (const std::optional<NewObject> kind = DrawCreateMenuItems())
+            m_Editor->Create(*kind, nullptr, m_SceneView.GetPlacement());
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Window")) {
@@ -348,7 +359,7 @@ void EditorApp::DrawSavePrompt()
     ImGui::SameLine();
     if (ImGui::Button("Don't Save", ImVec2(120.0f, 0.0f))) {
         ImGui::CloseCurrentPopup();
-        m_SceneDirty = false;
+        m_Editor->MarkClean();
         if (std::function<void()> action = std::exchange(m_AfterSavePrompt, {}))
             action();
     }
@@ -365,10 +376,45 @@ void EditorApp::UpdateTitle()
     // "VivaEditor - MyGame - Main*", where * means unsaved changes, as in Unity's title bar.
     std::string title = kTitle;
     if (m_Project)
-        title += " - " + m_Project->GetName() + " - " + GetSceneName() + (m_SceneDirty ? "*" : "");
+        title += " - " + m_Project->GetName() + " - " + GetSceneName() + (m_Editor->IsDirty() ? "*" : "");
     if (title != m_Title) {
         SetWindowTitle(title);
         m_Title = std::move(title);
+    }
+}
+
+void EditorApp::RunEditCommand(EditCommand command)
+{
+    GameObject* selection = m_Editor->GetSelection();
+    if (!selection)
+        return;
+    switch (command) {
+    case EditCommand::Duplicate:
+        m_Editor->Duplicate(*selection);
+        break;
+    case EditCommand::Rename:
+        // The name is edited in the Hierarchy, which must be showing for that.
+        m_Show.Hierarchy = true;
+        m_Hierarchy.StartRename(*selection);
+        break;
+    case EditCommand::Delete:
+        m_Editor->Delete(*selection);
+        break;
+    case EditCommand::FrameSelected:
+        m_SceneView.Frame(*selection);
+        break;
+    }
+}
+
+void EditorApp::OpenFile(const std::string& path)
+{
+    if (ProjectWindow::IsSceneFile(path)) {
+        OpenScene(path);
+        return;
+    }
+    if (ProjectWindow::IsModelFile(path)) {
+        if (const std::optional<std::string> assetName = m_ProjectWindow.GetAssetName(path))
+            m_Editor->PlaceModel(*assetName, m_SceneView.GetPlacement());
     }
 }
 

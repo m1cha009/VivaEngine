@@ -95,6 +95,9 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = settings.CullMode,
         .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .depthBiasEnable = settings.DepthBias != 0.0f ? VK_TRUE : VK_FALSE,
+        .depthBiasConstantFactor = settings.DepthBias,
+        .depthBiasSlopeFactor = settings.DepthBias,
         .lineWidth = 1.0f,
     };
 
@@ -104,9 +107,17 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
         .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
     };
 
-    // No blending: each pixel's color replaces what was there (Unity's "Blend Off").
+    // Without blending, each pixel's color replaces what was there (Unity's "Blend Off"). With
+    // it, the new color is weighed by its alpha against the old: new * alpha + old * (1 - alpha).
+    // The image's own alpha isn't shown anywhere; it gets the same treatment.
     const VkPipelineColorBlendAttachmentState blendAttachment {
-        .blendEnable = VK_FALSE,
+        .blendEnable = settings.AlphaBlend ? VK_TRUE : VK_FALSE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .alphaBlendOp = VK_BLEND_OP_ADD,
         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                           VK_COLOR_COMPONENT_A_BIT,
     };
@@ -124,7 +135,7 @@ std::unique_ptr<Pipeline> Pipeline::Create(VkDevice device, const PipelineSettin
     const VkPipelineDepthStencilStateCreateInfo depthStencil {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = depth ? VK_TRUE : VK_FALSE,
-        .depthWriteEnable = depth ? VK_TRUE : VK_FALSE,
+        .depthWriteEnable = depth && settings.DepthWrite ? VK_TRUE : VK_FALSE,
         .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
     };
 

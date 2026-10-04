@@ -31,8 +31,8 @@ glm::mat4 Camera::ProjectionMatrix(float aspect) const
 
 void Camera::VisitFields(FieldVisitor& fields)
 {
-    // In radians, like the field itself.
-    fields.Field("FieldOfView", FieldOfView);
+    // In radians, like the field itself; the Inspector shows degrees.
+    fields.Angle("FieldOfView", FieldOfView);
     fields.Field("NearPlane", NearPlane);
     fields.Field("FarPlane", FarPlane);
     fields.Field("BackgroundColor", BackgroundColor);

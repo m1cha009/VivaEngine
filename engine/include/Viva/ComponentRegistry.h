@@ -8,6 +8,7 @@
 #include <typeindex>
 #include <typeinfo>
 #include <utility>
+#include <vector>
 
 namespace Viva {
 
@@ -49,6 +50,9 @@ public:
 
     // The name a component's type was registered with, or "" if it wasn't registered.
     static std::string_view NameOf(const Component& component);
+
+    // Every registered name, in the order they were registered: the editor's Add Component list.
+    static std::vector<std::string> GetNames();
 
 private:
     // A pointer to a function that adds a component to a GameObject: a factory.

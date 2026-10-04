@@ -70,6 +70,15 @@ Component* ComponentRegistry::Add(GameObject& gameObject, std::string_view name)
     return nullptr;
 }
 
+std::vector<std::string> ComponentRegistry::GetNames()
+{
+    RegisterEngineComponents();
+    std::vector<std::string> names;
+    for (const Entry& entry : Entries())
+        names.push_back(entry.Name);
+    return names;
+}
+
 std::string_view ComponentRegistry::NameOf(const Component& component)
 {
     // typeid of a reference to a class with virtual functions gives the object's real type: a

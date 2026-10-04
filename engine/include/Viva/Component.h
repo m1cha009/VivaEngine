@@ -36,6 +36,10 @@ public:
     GameObject& GetGameObject() const { return *m_GameObject; }
     Transform& GetTransform() const;
 
+    // Scene::Destroy was called on this component: it's removed from its GameObject at the end of
+    // the frame's updates, and until then it no longer updates.
+    bool IsDestroyed() const { return m_Destroyed; }
+
     // Hands each field that belongs in a scene file to `fields` (see Viva/FieldVisitor.h): the
     // settings of the component, like a MonoBehaviour's serialized fields. Runtime state, such as
     // pointers to other objects found in OnStart, stays out. To be saved and loaded, a component
@@ -59,10 +63,12 @@ protected:
     virtual void OnFixedUpdate(float /*fixedDt*/) {}
 
 private:
-    // GameObject attaches the component and calls its On... functions.
+    // GameObject attaches the component and calls its On... functions; Scene::Destroy marks it.
     friend class GameObject;
+    friend class Scene;
     GameObject* m_GameObject = nullptr;
-    bool m_Started = false; // OnStart has been called
+    bool m_Started = false;   // OnStart has been called
+    bool m_Destroyed = false; // Scene::Destroy was called: it goes at the end of the frame's updates
 };
 
 } // namespace Viva

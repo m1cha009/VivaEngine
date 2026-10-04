@@ -42,6 +42,20 @@ struct PipelineSettings {
     // Which triangles to skip: VK_CULL_MODE_BACK_BIT skips those facing away from the camera
     // (Unity's "Cull Back"). Front faces are the ones whose corners appear counter-clockwise.
     VkCullModeFlags CullMode = VK_CULL_MODE_NONE;
+    // Whether drawn pixels store their depth (Unity's "ZWrite On"). Something see-through, like
+    // the grid, tests against the depth buffer but leaves it alone, so it can't hide what's
+    // drawn after it. Only matters with a DepthFormat.
+    bool DepthWrite = true;
+    // Moves every depth this far towards the camera, in steps of the smallest depth difference
+    // the buffer can tell apart (plus as much again per unit of slope, for surfaces seen at a
+    // grazing angle). Negative values pull nearer. Something drawn exactly on another surface,
+    // like the grid on a floor at y = 0, wins the depth test with it instead of flickering
+    // ("z-fighting"; Unity's "Offset -1, -1").
+    float DepthBias = 0.0f;
+    // Blends with what's already in the image by the fragment shader's alpha: alpha 1 covers it,
+    // 0 leaves it (Unity's "Blend SrcAlpha OneMinusSrcAlpha"). Off, each pixel replaces what was
+    // there.
+    bool AlphaBlend = false;
 };
 
 // A graphics pipeline: everything about *how* the GPU draws, baked into one object. That's the

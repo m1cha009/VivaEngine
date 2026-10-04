@@ -4,6 +4,9 @@
 
 #include "InspectorWindow.h"
 
+#include "EditorUi.h"
+#include "SceneEditor.h"
+
 #include "Viva/Assets.h"
 #include "Viva/Component.h"
 #include "Viva/ComponentRegistry.h"
@@ -17,8 +20,12 @@
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
 
+#include <algorithm>
+#include <array>
 #include <cctype>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <typeinfo>
@@ -50,12 +57,41 @@ bool IsColor(std::string_view name)
     return name.ends_with("Color");
 }
 
+// What a mesh or texture field shows: its asset name, "(made in code)" if it has none, or "(none)".
+template <typename Resource>
+std::string ShownName(const std::shared_ptr<Resource>& resource)
+{
+    if (!resource)
+        return "(none)";
+    const std::string& name = Renderer::GetAssetName(*resource);
+    return name.empty() ? "(made in code)" : name;
+}
+
+// A drop-down list ("combo box") of asset names, "(none)" first: Unity's object picker, as a list.
+// Returns the name picked this frame ("" for none), if any.
+std::optional<std::string> PickAsset(const char* label, const std::string& shown, std::span<const std::string> names)
+{
+    std::optional<std::string> picked;
+    if (!ImGui::BeginCombo(label, shown.c_str()))
+        return picked;
+    if (ImGui::Selectable("(none)", shown == "(none)"))
+        picked = std::string();
+    for (const std::string& name : names) {
+        if (ImGui::Selectable(name.c_str(), name == shown))
+            picked = name;
+    }
+    ImGui::EndCombo();
+    return picked;
+}
+
 // Draws a widget per field, in the window being built, and edits the field in place: ImGui's
 // widgets take a pointer to the value they show, and change it when the user drags or types.
+// `textureNames`: the image files in the project's Assets folder, which the texture picker offers.
 class InspectorVisitor final : public FieldVisitor {
 public:
-    explicit InspectorVisitor(Assets& assets)
+    InspectorVisitor(Assets& assets, std::span<const std::string> textureNames)
         : m_Assets(assets)
+        , m_TextureNames(textureNames)
     {
     }
 
@@ -66,6 +102,17 @@ public:
     {
         if (Visible())
             m_Changed |= ImGui::DragFloat(Label(name), &value, 0.05f);
+    }
+    // Shown in degrees, kept in radians.
+    void Angle(std::string_view name, float& radians) override
+    {
+        if (!Visible())
+            return;
+        float degrees = glm::degrees(radians);
+        if (ImGui::DragFloat(Label(name), &degrees, 0.5f)) {
+            radians = glm::radians(degrees);
+            m_Changed = true;
+        }
     }
     void Field(std::string_view name, glm::vec2& value) override
     {
@@ -108,16 +155,25 @@ public:
         }
     }
 
-    // Meshes and textures show their asset names. Choosing another comes with M16's pickers.
+    // Meshes and textures are picked from lists: the built-in primitives, and the project's image
+    // files. (A model's meshes stay as they are; place models from the Project window.)
     void Field(std::string_view name, std::shared_ptr<Mesh>& value) override
     {
-        if (Visible())
-            ShowAssetName(name, value ? &Renderer::GetAssetName(*value) : nullptr);
+        if (!Visible())
+            return;
+        if (const std::optional<std::string> picked = PickAsset(Label(name), ShownName(value), Assets::GetPrimitiveNames())) {
+            value = picked->empty() ? nullptr : m_Assets.GetMesh(*picked);
+            m_Changed = true;
+        }
     }
     void Field(std::string_view name, std::shared_ptr<Texture>& value) override
     {
-        if (Visible())
-            ShowAssetName(name, value ? &Renderer::GetAssetName(*value) : nullptr);
+        if (!Visible())
+            return;
+        if (const std::optional<std::string> picked = PickAsset(Label(name), ShownName(value), m_TextureNames)) {
+            value = picked->empty() ? nullptr : m_Assets.GetTexture(*picked);
+            m_Changed = true;
+        }
     }
 
     // A material is its settings: shown in a tree node of their own, and a change asks Assets for
@@ -128,7 +184,13 @@ public:
         if (!Visible())
             return;
         if (!value) {
-            ImGui::LabelText(Label(name), "(none)");
+            // A part without a material isn't drawn. This gives it the plain white one.
+            if (ImGui::Button("Create Material")) {
+                value = m_Assets.GetMaterial({});
+                m_Changed = true;
+            }
+            ImGui::SameLine();
+            ImGui::TextUnformatted(Label(name));
             return;
         }
         if (!ImGui::TreeNodeEx(Label(name), ImGuiTreeNodeFlags_DefaultOpen))
@@ -145,9 +207,17 @@ public:
 protected:
     // A list is a tree node, and each element a numbered one inside it. While a node is closed,
     // its fields are still visited (FieldVisitor::List visits every element), but nothing is drawn.
+    // Its first line is the number of elements, as in Unity's inspector: changing it is what adds
+    // and removes elements (FieldVisitor::List resizes the list to the size returned here).
     size_t BeginList(std::string_view name, size_t size) override
     {
-        m_Open.push_back(Visible() && ImGui::TreeNodeEx(Label(name), ImGuiTreeNodeFlags_DefaultOpen));
+        const bool open = Visible() && ImGui::TreeNodeEx(Label(name), ImGuiTreeNodeFlags_DefaultOpen);
+        m_Open.push_back(open);
+        int count = static_cast<int>(size);
+        if (open && ImGui::InputInt("Size", &count)) {
+            size = static_cast<size_t>(std::clamp(count, 0, kMaxListSize));
+            m_Changed = true;
+        }
         return size;
     }
     void BeginElement(size_t index) override
@@ -181,13 +251,11 @@ private:
         return m_Label.c_str();
     }
 
-    void ShowAssetName(std::string_view name, const std::string* assetName)
-    {
-        const char* text = !assetName ? "(none)" : assetName->empty() ? "(made in code)" : assetName->c_str();
-        ImGui::LabelText(Label(name), "%s", text);
-    }
+    // More would be a typing slip: a list this long has no use in a hand-made scene.
+    static constexpr int kMaxListSize = 64;
 
     Assets& m_Assets;
+    std::span<const std::string> m_TextureNames;
     std::vector<bool> m_Open; // for each list and element being visited: is its tree node open?
     std::string m_Label;
     bool m_Changed = false;
@@ -195,57 +263,78 @@ private:
 
 } // namespace
 
-bool DrawInspectorWindow(GameObject* selection, Assets& assets, bool* open)
+void DrawInspectorWindow(SceneEditor& editor, std::span<const std::string> textureNames, bool* open)
 {
     // Begin returns false when the window is collapsed or its tab hidden; End is called either way.
     if (!ImGui::Begin("Inspector", open)) {
         ImGui::End();
-        return false;
+        return;
     }
+    GameObject* selection = editor.GetSelection();
     if (!selection) {
-        ImGui::TextDisabled("Select a GameObject in the Hierarchy.");
+        ImGui::TextDisabled("Select a GameObject in the Hierarchy or the Scene view.");
         ImGui::End();
-        return false;
+        return;
     }
-    bool changed = false;
 
     // Widgets end this far from the window's right edge, leaving room for their labels (ImGui puts
     // labels on the right). A negative item width means "the available width minus this".
     ImGui::PushItemWidth(-ImGui::GetFontSize() * 9.0f);
 
-    // The name, and the object's own Active switch: below an inactive parent it stays hidden
-    // either way. (Renaming comes with M16.)
+    // The object's own Active switch (below an inactive parent it stays hidden either way), and
+    // its name, renamed as it's typed.
     bool active = selection->IsActiveSelf();
-    if (ImGui::Checkbox("##Active", &active)) {
-        selection->SetActive(active);
-        changed = true;
-    }
+    if (ImGui::Checkbox("##Active", &active))
+        editor.SetActive(*selection, active);
     ImGui::SameLine();
-    ImGui::TextUnformatted(selection->GetName().c_str());
+    std::array<char, 256> name;
+    CopyToBuffer(name, selection->GetName());
+    ImGui::SetNextItemWidth(-1.0f); // to the right edge: it has no label
+    if (ImGui::InputText("##Name", name.data(), name.size()))
+        editor.Rename(*selection, name.data());
     ImGui::Separator();
 
-    InspectorVisitor visitor(assets);
+    InspectorVisitor visitor(editor.GetAssets(), textureNames);
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
         selection->GetTransform().VisitFields(visitor);
 
     // Every component, as a header named after its registered type. Fields with the same name in
     // two components ("Color") would be the same widget to ImGui, so each component gets an ID
-    // scope of its own.
+    // scope of its own. Right-clicking a header offers to remove the component (Unity has that in
+    // the header's menu, behind its three dots).
     const std::vector<std::unique_ptr<Component>>& components = selection->GetComponents();
     for (size_t i = 0; i < components.size(); ++i) {
         Component& component = *components[i];
         const std::string_view type = ComponentRegistry::NameOf(component);
         const std::string title = type.empty() ? typeid(component).name() : NiceName(type);
         ImGui::PushID(static_cast<int>(i));
-        if (ImGui::CollapsingHeader(title.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+        const bool expanded = ImGui::CollapsingHeader(title.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Remove Component"))
+                editor.RemoveComponent(component);
+            ImGui::EndPopup();
+        }
+        if (expanded) {
             if (type.empty())
                 ImGui::TextDisabled("Not registered, so scene files leave it out (see ComponentRegistry).");
             component.VisitFields(visitor);
         }
         ImGui::PopID();
     }
-    changed |= visitor.Changed();
+    if (visitor.Changed())
+        editor.MarkDirty();
     ImGui::PopItemWidth();
+
+    // Add Component: a button the width of the window, opening the list of registered types.
+    ImGui::Spacing();
+    if (ImGui::Button("Add Component", ImVec2(-1.0f, 0.0f)))
+        ImGui::OpenPopup("Add Component");
+    if (ImGui::BeginPopup("Add Component")) {
+        for (const std::string& type : ComponentRegistry::GetNames()) {
+            if (ImGui::MenuItem(NiceName(type).c_str()))
+                editor.AddComponent(*selection, type);
+        }
+        ImGui::EndPopup();
+    }
     ImGui::End();
-    return changed;
 }

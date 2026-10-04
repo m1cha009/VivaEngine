@@ -10,6 +10,28 @@
 
 using namespace Viva;
 
+namespace {
+
+// The image formats Assets can load (stb_image, M7).
+bool IsImageFile(const std::string& path)
+{
+    const std::string extension = GetFileExtension(path);
+    return extension == "png" || extension == "jpg" || extension == "jpeg";
+}
+
+} // namespace
+
+bool ProjectWindow::IsSceneFile(const std::string& path)
+{
+    return GetFileExtension(path) == Scene::kFileExtension;
+}
+
+bool ProjectWindow::IsModelFile(const std::string& path)
+{
+    const std::string extension = GetFileExtension(path);
+    return extension == "gltf" || extension == "glb";
+}
+
 void ProjectWindow::SetProject(const Project* project)
 {
     m_Folders.clear();
@@ -21,8 +43,11 @@ void ProjectWindow::SetProject(const Project* project)
 void ProjectWindow::Refresh()
 {
     m_Roots.clear();
+    m_TextureNames.clear();
     for (const std::string& folder : m_Folders)
         m_Roots.push_back(Read(folder, GetFileStem(folder)));
+    if (!m_Roots.empty())
+        CollectAssetNames(m_Roots.front()); // the Assets folder's tree
 }
 
 ProjectWindow::Entry ProjectWindow::Read(const std::string& path, const std::string& name)
@@ -43,36 +68,57 @@ ProjectWindow::Entry ProjectWindow::Read(const std::string& path, const std::str
     return entry;
 }
 
+void ProjectWindow::CollectAssetNames(const Entry& entry)
+{
+    if (!entry.IsFolder) {
+        if (IsImageFile(entry.Path))
+            m_TextureNames.push_back(*GetAssetName(entry.Path));
+        return;
+    }
+    for (const Entry& child : entry.Children)
+        CollectAssetNames(child);
+}
+
+std::optional<std::string> ProjectWindow::GetAssetName(const std::string& path) const
+{
+    // Below the Assets folder: the path from there on, past the separator.
+    if (m_Folders.empty())
+        return std::nullopt;
+    const std::string prefix = m_Folders.front() + "/";
+    if (!path.starts_with(prefix))
+        return std::nullopt;
+    return path.substr(prefix.size());
+}
+
 std::optional<std::string> ProjectWindow::Draw(bool* open)
 {
-    std::optional<std::string> openScene;
+    std::optional<std::string> doubleClicked;
     if (ImGui::Begin("Project", open)) {
         if (ImGui::Button("Refresh"))
             Refresh();
         ImGui::SameLine();
-        ImGui::TextDisabled("Double-click a .scene file to open it.");
+        ImGui::TextDisabled("Double-click a scene to open it, a .gltf or .glb model to place it.");
         ImGui::Separator();
         for (const Entry& root : m_Roots)
-            DrawEntry(root, openScene);
+            DrawEntry(root, doubleClicked);
     }
     ImGui::End();
-    return openScene;
+    return doubleClicked;
 }
 
-void ProjectWindow::DrawEntry(const Entry& entry, std::optional<std::string>& openScene)
+void ProjectWindow::DrawEntry(const Entry& entry, std::optional<std::string>& doubleClicked)
 {
     if (!entry.IsFolder) {
         // A file is a leaf: a tree node with no arrow and nothing to pop (NoTreePushOnOpen).
         ImGui::TreeNodeEx(entry.Path.c_str(), ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
                                                   ImGuiTreeNodeFlags_SpanAvailWidth, "%s", entry.Name.c_str());
-        if (entry.Name.ends_with(std::string(".") + Scene::kFileExtension) && ImGui::IsItemHovered() &&
-            ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-            openScene = entry.Path;
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            doubleClicked = entry.Path;
         return;
     }
     if (ImGui::TreeNodeEx(entry.Path.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth, "%s/", entry.Name.c_str())) {
         for (const Entry& child : entry.Children)
-            DrawEntry(child, openScene);
+            DrawEntry(child, doubleClicked);
         ImGui::TreePop();
     }
 }

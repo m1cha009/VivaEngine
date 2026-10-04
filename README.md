@@ -18,10 +18,12 @@ scene saved to a file ([M13](docs/milestones/M13.md)); `assets/scenes/` has two 
 
 ## VivaEditor
 
-The editor ([M14](docs/milestones/M14.md), [M15](docs/milestones/M15.md)) is a second program
-next to the Sandbox. It opens on the Project Manager, where you create, open and delete projects,
-like Unity Hub. A project opens in a Unity-like editor: Scene, Hierarchy, Inspector, Project and
-Console windows in a docking layout. More editing comes in the next milestones
+The editor ([M14](docs/milestones/M14.md), [M15](docs/milestones/M15.md),
+[M16](docs/milestones/M16.md)) is a second program next to the Sandbox. It opens on the Project
+Manager, where you create, open and delete projects, like Unity Hub. A project opens in a
+Unity-like editor: Scene, Hierarchy, Inspector, Project and Console windows in a docking layout,
+where you create primitives, cameras and models, select them by clicking, edit, duplicate,
+reparent and delete them, and save the scene. Gizmos, undo and Play mode come next
 ([`docs/EditorRoadmap.md`](docs/EditorRoadmap.md)).
 
 ## Prerequisites

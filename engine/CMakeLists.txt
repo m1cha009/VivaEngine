@@ -10,6 +10,7 @@ add_library(VivaEngine STATIC
     src/Core/ImageFile.cpp
     src/Core/Json.cpp
     src/Core/Log.cpp
+    src/Core/MeshData.cpp
     src/Core/Primitives.cpp
     src/Core/Project.cpp
     src/Core/Time.cpp
@@ -97,6 +98,8 @@ viva_set_warnings(VivaEngine)
 # The renderer's shaders, compiled to SPIR-V into bin/shaders/ whenever the engine is built (see
 # cmake/Shaders.cmake). The engine loads them from there at runtime.
 viva_compile_shaders(VivaEngine
+    ${PROJECT_SOURCE_DIR}/shaders/Grid.vert
+    ${PROJECT_SOURCE_DIR}/shaders/Grid.frag
     ${PROJECT_SOURCE_DIR}/shaders/ImGui.frag
     ${PROJECT_SOURCE_DIR}/shaders/Unlit.vert
     ${PROJECT_SOURCE_DIR}/shaders/Unlit.frag)

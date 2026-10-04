@@ -28,4 +28,25 @@ struct MeshData {
     std::vector<uint32_t> Indices;
 };
 
+// The smallest box, lined up with the axes, that holds every vertex of a mesh: its lowest and its
+// highest x, y and z (Unity's Mesh.bounds, which stores the center and the half-size instead). In
+// the mesh's own space; a GameObject's world matrix turns it into a (possibly tilted) box in the
+// world. The editor tests mouse clicks against it, and frames objects by it.
+struct Bounds {
+    glm::vec3 Min { 0.0f };
+    glm::vec3 Max { 0.0f };
+
+    glm::vec3 Center() const { return (Min + Max) * 0.5f; }
+    glm::vec3 Size() const { return Max - Min; }
+    // The box's 8 corners, numbered 0 to 7: each bit of the number picks Min or Max along one
+    // axis (1: x, 2: y, 4: z). So two corners share an edge when their numbers differ in one bit.
+    glm::vec3 Corner(int index) const
+    {
+        return { index & 1 ? Max.x : Min.x, index & 2 ? Max.y : Min.y, index & 4 ? Max.z : Min.z };
+    }
+};
+
+// The bounds of `data`'s vertices (all zero for a mesh without any).
+Bounds ComputeBounds(const MeshData& data);
+
 } // namespace Viva

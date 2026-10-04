@@ -15,6 +15,7 @@ std::unique_ptr<Mesh> Mesh::Create(const VulkanContext& context, const MeshData&
     mesh->m_IndexBuffer = Buffer::CreateWithData(context, std::as_bytes(std::span(data.Indices)),
                                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
     mesh->m_IndexCount = static_cast<uint32_t>(data.Indices.size());
+    mesh->m_Bounds = ComputeBounds(data);
     Log::Trace("Mesh uploaded: {} vertices, {} triangles ({} + {} bytes)", data.Vertices.size(),
                data.Indices.size() / 3, mesh->m_VertexBuffer->GetSize(), mesh->m_IndexBuffer->GetSize());
     return mesh;

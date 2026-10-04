@@ -45,6 +45,9 @@ public:
 
     // Three per triangle.
     uint32_t GetIndexCount() const { return m_IndexCount; }
+    // Where its vertices lie (see Renderer::GetBounds), recorded when it was created: the vertices
+    // themselves only exist on the GPU from then on.
+    const Bounds& GetBounds() const { return m_Bounds; }
 
     // See Renderer::CreateMesh.
     const std::string& GetAssetName() const { return m_AssetName; }
@@ -54,6 +57,7 @@ private:
     std::unique_ptr<Buffer> m_VertexBuffer;
     std::unique_ptr<Buffer> m_IndexBuffer;
     uint32_t m_IndexCount = 0;
+    Bounds m_Bounds;
     std::string m_AssetName;
 };
 

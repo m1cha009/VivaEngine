@@ -19,8 +19,8 @@ struct MaterialSettings;
 
 // The other half of Component::VisitFields: something that does a job with each of a component's
 // fields, given its name and a reference to it. One visitor writes the fields into a scene file,
-// another reads them back from one, and the editor's Inspector (M16) will be a third that draws a
-// widget per field. The component lists its fields once, and every job uses that list:
+// another reads them back from one, and the editor's Inspector is a third that draws a widget per
+// field. The component lists its fields once, and every job uses that list:
 //
 //     void Spinner::VisitFields(FieldVisitor& fields)
 //     {
@@ -50,6 +50,10 @@ public:
     virtual void Field(std::string_view name, std::shared_ptr<Mesh>& value) = 0;
     virtual void Field(std::string_view name, std::shared_ptr<Texture>& value) = 0;
     virtual void Field(std::string_view name, std::shared_ptr<Material>& value) = 0;
+
+    // A float that's an angle in radians, like a Camera's field of view. Files store it as the
+    // plain number it is (this calls Field), while the Inspector overrides it to show degrees.
+    virtual void Angle(std::string_view name, float& radians) { Field(name, radians); }
 
     // A list of elements, each with fields of its own, like MeshRenderer's parts:
     //     fields.List("Parts", Parts, [](FieldVisitor& part, MeshPart& element) {

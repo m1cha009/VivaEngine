@@ -35,6 +35,9 @@ public:
     Assets(const Assets&) = delete;
     Assets& operator=(const Assets&) = delete;
 
+    // The built-in primitives' mesh names, for lists like the editor's mesh picker.
+    static const std::vector<std::string>& GetPrimitiveNames();
+
     // Each returns nullptr (after logging why) if there's no such asset or it can't be loaded.
     std::shared_ptr<Mesh> GetMesh(const std::string& name);
     std::shared_ptr<Texture> GetTexture(const std::string& name);

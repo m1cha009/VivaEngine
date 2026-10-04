@@ -5,12 +5,15 @@ add_executable(VivaEditor
     src/ConsoleWindow.cpp
     src/EditorApp.cpp
     src/EditorCamera.cpp
+    src/EditorMenus.cpp
     src/HierarchyWindow.cpp
     src/InspectorWindow.cpp
     src/Main.cpp
+    src/Picking.cpp
     src/ProjectList.cpp
     src/ProjectManager.cpp
     src/ProjectWindow.cpp
+    src/SceneEditor.cpp
     src/SceneView.cpp)
 
 # The same as the Sandbox: the engine brings its public headers, GLM and ImGui along.

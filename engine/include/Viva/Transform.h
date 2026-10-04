@@ -67,12 +67,19 @@ public:
     // position) has no single answer, so then nothing changes.
     void LookAt(const glm::vec3& worldPoint, const glm::vec3& worldUp = glm::vec3(0.0f, 1.0f, 0.0f));
 
-    // The hierarchy. A child moves, turns and scales with its parent. SetParent keeps the local
-    // values, so the object jumps to the same place relative to its new parent: that's Unity's
-    // SetParent(parent, false). nullptr makes it a root object.
+    // The hierarchy. A child moves, turns and scales with its parent. nullptr makes it a root
+    // object. By default SetParent keeps the local values, so the object jumps to the same place
+    // relative to its new parent: Unity's SetParent(parent, false). With keepWorldPose, the local
+    // values change instead, so the object stays where it is in the world, as when you drag it
+    // onto another in Unity's Hierarchy: SetParent(parent, true).
     Transform* GetParent() const { return m_Parent; }
     const std::vector<Transform*>& GetChildren() const { return m_Children; }
-    void SetParent(Transform* parent);
+    void SetParent(Transform* parent, bool keepWorldPose = false);
+    // Whether SetParent(parent) is allowed: not below itself or one of its own children, which
+    // would make the hierarchy a loop. nullptr (a root object) always is.
+    bool CanSetParent(const Transform* parent) const;
+    // Whether `ancestor` is this transform's parent, or its parent's parent, and so on.
+    bool IsBelow(const Transform& ancestor) const;
 
     // The child whose GameObject has this name, or nullptr: Unity's transform.Find. Only direct
     // children are searched, but a path like "Body/Wheels" goes one level down per name. Names
@@ -95,5 +102,11 @@ private:
     // Not owned: every GameObject is owned by the scene, and these only point at their Transforms.
     std::vector<Transform*> m_Children;
 };
+
+// Takes a matrix built like LocalMatrix (move * turn * scale) apart again, into its position,
+// rotation and scale. A matrix that also skews (a rotated child of a parent scaled unevenly
+// can't be described by a position, a rotation and a scale) comes out as the nearest such
+// values; Unity's lossyScale is the same compromise.
+void DecomposeMatrix(const glm::mat4& matrix, glm::vec3& position, glm::quat& rotation, glm::vec3& scale);
 
 } // namespace Viva

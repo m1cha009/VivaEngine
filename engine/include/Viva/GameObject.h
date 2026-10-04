@@ -70,6 +70,7 @@ private:
     void ForEachStartedComponent(Callback callback);
     bool CanUpdate() const { return !m_Destroyed && IsActiveInHierarchy(); }
     void MarkDestroyed(); // this object and everything below it
+    void RemoveDestroyedComponents();
 
     // Declared in this order because they're initialized in this order: m_Transform takes the
     // GameObject it belongs to, and the others are ready by then.
