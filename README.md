@@ -6,6 +6,7 @@ A small game engine in C++20 and Vulkan 1.3, built one milestone at a time to le
 engines work.
 
 - [`CLAUDE.md`](CLAUDE.md): the project brief, roadmap, status and decision log
+- [`docs/Guide.md`](docs/Guide.md): how to use the engine (build, run, make a scene, Unity cheat sheet)
 - [`docs/milestones/`](docs/milestones/): one explainer per milestone (start with [`M0.md`](docs/milestones/M0.md)). Each describes the code as of its milestone's commit (`git log --oneline` lists them; `git checkout <commit>` to follow along exactly).
 - [`docs/MacChecklist.md`](docs/MacChecklist.md): things to verify when building on macOS
 

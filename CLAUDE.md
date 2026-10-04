@@ -88,6 +88,7 @@ VivaEngine/
 ├── assets/
 ├── scripts/                # build.cmd: Windows command-line build through vcvars64.bat
 └── docs/
+    ├── Guide.md            # how to use the engine: build, run, make a scene, cheat sheet (keep it current)
     └── milestones/         # one explainer per milestone: M0.md, M1.md, ...
 ```
 
