@@ -1,5 +1,5 @@
-// Scene::Save and Scene::Load: scene files (and Scene::Instantiate, which copies through them). A class's member functions can be defined in more than
-// one .cpp file; these live apart from Scene.cpp because they're a topic of their own, and they
+// Scene::Save and Scene::Load: scene files (and Serialize, Deserialize and Instantiate, which work
+// through the same JSON). A class's member functions can be defined in more than one .cpp file; these live apart from Scene.cpp because they're a topic of their own, and they
 // bring in JSON, the asset names and the component registry, which the rest of Scene doesn't need.
 
 #include "Viva/Scene.h"
@@ -14,6 +14,7 @@
 
 #include <glm/gtc/quaternion.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -273,10 +274,12 @@ private:
     std::vector<const Json::Array*> m_Lists;
 };
 
-Json SaveGameObject(const GameObject& gameObject)
+Json SaveGameObject(const GameObject& gameObject, bool withIds)
 {
     Json::Object object;
     object.emplace_back("Name", gameObject.GetName());
+    if (withIds)
+        object.emplace_back("Id", static_cast<double>(gameObject.GetId())); // exact up to 2^53
     object.emplace_back("Active", gameObject.IsActiveSelf());
 
     // VisitFields isn't const, because reading changes the fields. Writing doesn't, and the scene
@@ -289,6 +292,8 @@ Json SaveGameObject(const GameObject& gameObject)
 
     Json::Array components;
     for (const std::unique_ptr<Component>& component : gameObject.GetComponents()) {
+        if (component->IsDestroyed())
+            continue; // removed this frame (Scene::Destroy), as good as gone
         const std::string_view type = ComponentRegistry::NameOf(*component);
         if (type.empty()) {
             // typeid(...).name() is the compiler's name for the type, "class TruckController" on
@@ -311,24 +316,28 @@ Json SaveGameObject(const GameObject& gameObject)
     Json::Array children;
     for (const Transform* child : gameObject.GetTransform().GetChildren()) {
         if (!child->GetGameObject().IsDestroyed())
-            children.push_back(SaveGameObject(child->GetGameObject()));
+            children.push_back(SaveGameObject(child->GetGameObject(), withIds));
     }
     if (!children.empty())
         object.emplace_back("Children", std::move(children));
     return object;
 }
 
-// Creates the GameObject `json` describes, below `parent`, and everything below it. Returns it, or
-// nullptr if `json` isn't a GameObject.
-GameObject* LoadGameObject(Scene& scene, const Json& json, GameObject* parent, Assets& assets)
+} // namespace
+
+GameObject* Scene::LoadGameObject(const Json& json, GameObject* parent, Assets& assets)
 {
     if (!json.IsObject()) {
         Log::Warn("Skipping a GameObject that isn't a JSON object");
         return nullptr;
     }
     const Json* name = json.Find("Name");
-    GameObject& gameObject =
-        scene.CreateGameObject(name && name->AsString() ? *name->AsString() : "GameObject", parent);
+    GameObject& gameObject = CreateGameObject(name && name->AsString() ? *name->AsString() : "GameObject", parent);
+    // A snapshot's Id (see Serialize) replaces the new one; later objects are numbered past it.
+    if (const Json* id = json.Find("Id"); id && id->AsNumber()) {
+        gameObject.m_Id = static_cast<uint64_t>(*id->AsNumber());
+        m_NextId = std::max(m_NextId, gameObject.m_Id + 1);
+    }
     if (const Json* active = json.Find("Active"); active && active->AsBool())
         gameObject.SetActive(*active->AsBool());
 
@@ -355,27 +364,30 @@ GameObject* LoadGameObject(Scene& scene, const Json& json, GameObject* parent, A
 
     if (const Json* children = json.Find("Children"); children && children->AsArray()) {
         for (const Json& child : *children->AsArray())
-            LoadGameObject(scene, child, &gameObject, assets);
+            LoadGameObject(child, &gameObject, assets);
     }
     return &gameObject;
 }
 
-} // namespace
-
-bool Scene::Save(const std::string& path) const
+Json Scene::Serialize(bool withIds) const
 {
     // The roots, in the order they were created; each brings its children along.
     Json::Array gameObjects;
     for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects) {
         if (!gameObject->GetTransform().GetParent() && !gameObject->IsDestroyed())
-            gameObjects.push_back(SaveGameObject(*gameObject));
+            gameObjects.push_back(SaveGameObject(*gameObject, withIds));
     }
 
     Json::Object file;
     file.emplace_back("Format", kFormatName);
     file.emplace_back("Version", kFormatVersion);
     file.emplace_back("GameObjects", std::move(gameObjects));
-    if (!WriteTextFile(path, WriteJson(Json(std::move(file)))))
+    return file;
+}
+
+bool Scene::Save(const std::string& path) const
+{
+    if (!WriteTextFile(path, WriteJson(Serialize())))
         return false;
     Log::Info("Scene saved: {}", path);
     return true;
@@ -385,7 +397,7 @@ GameObject& Scene::Instantiate(const GameObject& original, Assets& assets, GameO
 {
     // Into JSON and straight back out, without a file in between. Saving always gives an object,
     // so loading it always makes one.
-    return *LoadGameObject(*this, SaveGameObject(original), parent, assets);
+    return *LoadGameObject(SaveGameObject(original, false), parent, assets);
 }
 
 bool Scene::Load(const std::string& path, Assets& assets)
@@ -396,17 +408,23 @@ bool Scene::Load(const std::string& path, Assets& assets)
         Log::Error("{}", error);
         return false;
     }
-    const Json* gameObjects = file->Find("GameObjects");
-    if (!gameObjects || !gameObjects->AsArray()) {
-        Log::Error("{} has no list of GameObjects", path);
-        return false;
-    }
-
     // Every GameObject created is added to the end of m_GameObjects, so the growth is the count.
     const size_t before = m_GameObjects.size();
-    for (const Json& gameObject : *gameObjects->AsArray())
-        LoadGameObject(*this, gameObject, nullptr, assets);
+    if (!Deserialize(*file, assets, path))
+        return false;
     Log::Info("Scene loaded: {} ({} GameObjects)", path, m_GameObjects.size() - before);
+    return true;
+}
+
+bool Scene::Deserialize(const Json& json, Assets& assets, std::string_view source)
+{
+    const Json* gameObjects = json.Find("GameObjects");
+    if (!gameObjects || !gameObjects->AsArray()) {
+        Log::Error("{} has no list of GameObjects", source);
+        return false;
+    }
+    for (const Json& gameObject : *gameObjects->AsArray())
+        LoadGameObject(gameObject, nullptr, assets);
     return true;
 }
 

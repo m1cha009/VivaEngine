@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Viva/Input.h"
+
 #include <imgui.h>
 
 #include <algorithm>
@@ -13,6 +15,12 @@
 inline void CenterNextWindow()
 {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+}
+
+// Whether either Ctrl key is held, read through Input like the editor's other keys.
+inline bool IsCtrlHeld()
+{
+    return Viva::Input::GetKey(Viva::Key::LeftControl) || Viva::Input::GetKey(Viva::Key::RightControl);
 }
 
 // Copies text into an ImGui text buffer, cutting it short if it doesn't fit, and ends it with the

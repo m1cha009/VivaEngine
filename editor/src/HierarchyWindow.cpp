@@ -84,6 +84,10 @@ void HierarchyWindow::DrawNode(SceneEditor& editor, GameObject& gameObject, bool
 {
     if (gameObject.IsDestroyed())
         return;
+    // Each line's ImGui ID is the object's Id (names needn't be unique), not its address: undo
+    // replaces the objects with new ones that have the same Ids (see SceneEditor), and the open
+    // branches stay open. Pushed for the whole node, its children included.
+    ImGui::PushID(static_cast<int>(gameObject.GetId()));
     const std::vector<Transform*>& children = gameObject.GetTransform().GetChildren();
     const GameObject* selection = editor.GetSelection();
     const bool renaming = m_Renaming && &gameObject == selection;
@@ -106,8 +110,7 @@ void HierarchyWindow::DrawNode(SceneEditor& editor, GameObject& gameObject, bool
     const bool active = gameObject.IsActiveInHierarchy();
     if (!active)
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    // The object's address is its ID in the tree: names needn't be unique, addresses are.
-    const bool open = ImGui::TreeNodeEx(&gameObject, flags, "%s", renaming ? "" : gameObject.GetName().c_str());
+    const bool open = ImGui::TreeNodeEx("GameObject", flags, "%s", renaming ? "" : gameObject.GetName().c_str());
     if (!active)
         ImGui::PopStyleColor();
     if (reveal && &gameObject == selection && !ImGui::IsItemVisible())
@@ -135,7 +138,7 @@ void HierarchyWindow::DrawNode(SceneEditor& editor, GameObject& gameObject, bool
         if (const std::optional<NewObject> kind = DrawCreateMenuItems())
             m_Deferred = [&editor, kind, parent = &gameObject] { editor.Create(*kind, parent, {}); };
         ImGui::Separator();
-        if (const std::optional<EditCommand> command = DrawEditMenuItems(true))
+        if (const std::optional<EditCommand> command = DrawEditMenuItems({ .HasSelection = true }, true))
             m_Command = command;
         ImGui::EndPopup();
     }
@@ -148,6 +151,7 @@ void HierarchyWindow::DrawNode(SceneEditor& editor, GameObject& gameObject, bool
             DrawNode(editor, child->GetGameObject(), reveal);
         ImGui::TreePop();
     }
+    ImGui::PopID();
 }
 
 void HierarchyWindow::DrawRenameField(SceneEditor& editor, GameObject& gameObject)

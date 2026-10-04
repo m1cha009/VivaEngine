@@ -68,8 +68,9 @@ private:
     void AskToSaveThen(std::function<void()> action);
 
     void DrawEditor(float dt);
-    void DrawMenuBar();
-    // An Edit menu command, on the selection: nothing without one.
+    // Returns the Edit menu's command clicked, if any, which runs after the windows have drawn.
+    std::optional<EditCommand> DrawMenuBar();
+    // An Edit menu command: Undo, Redo, or one on the selection (nothing without one).
     void RunEditCommand(EditCommand command);
     // A file double-clicked in the Project window: a scene opens, a model is placed.
     void OpenFile(const std::string& path);

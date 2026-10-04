@@ -4,8 +4,10 @@
 
 #include <glm/vec3.hpp>
 
+#include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Viva {
 class Application;
@@ -17,12 +19,16 @@ class Scene;
 
 // Everything the editor changes in the scene goes through here: creating, duplicating, deleting,
 // renaming, reparenting, adding and removing components. The windows (Hierarchy, Inspector, Scene
-// view, menus) only ask for these edits; none of them changes the scene's structure itself. So
-// there is one place that knows about every edit: today it selects what was made and marks the
-// scene as changed, and M17's undo will record each edit here.
+// view, menus) only ask for these edits, or say when they changed a field themselves
+// (MarkChanged). So this is the one place that knows about every edit, which is what undo needs.
 //
-// It also holds the selection (Unity's Selection.activeGameObject) and whether the scene has
-// unsaved changes.
+// It also holds the selection (Unity's Selection.activeGameObject), whether the scene has unsaved
+// changes, and the undo history (M17).
+//
+// Undo works with snapshots: after each finished edit, the whole scene is written down as the
+// text a scene file holds (Scene::Serialize, in memory, with the objects' Ids). Undo replaces the
+// scene with the snapshot before; Redo with the one after. Like Unity's Undo, an edit is finished
+// when the user lets go: one drag of a value or a gizmo, or one name typed, is one step.
 class SceneEditor {
 public:
     // The application's scene is the one edited, with its assets.
@@ -36,18 +42,30 @@ public:
     Viva::GameObject* GetSelection() const { return m_Selection; }
     void Select(Viva::GameObject* gameObject) { m_Selection = gameObject; }
 
-    // Whether the scene changed since it was loaded or saved (the * in the title).
-    bool IsDirty() const { return m_Dirty; }
-    // For changes made directly, rather than through the functions below: the Inspector's fields.
-    void MarkDirty() { m_Dirty = true; }
+    // Whether the scene differs from its file (the * in the title). Undoing back to the saved
+    // state makes it clean again.
+    bool IsDirty() const { return m_Changing || m_Current.Step != m_SavedStep; }
     // The scene matches its file again: it was saved, or its changes were dropped (Don't Save).
-    void MarkClean() { m_Dirty = false; }
-    // The scene was replaced (new, opened, closed): nothing is selected, and nothing has changed.
+    void MarkClean();
+    // The scene was replaced (new, opened, closed): nothing is selected, nothing has changed, and
+    // there's nothing to undo.
     void SceneReplaced();
 
-    // Called once a frame: forgets the selection once its object is gone. Other windows keep no
-    // GameObject pointers of their own, so this is the one place that checks.
-    void Update();
+    // Says the scene is being changed. The edits below call it themselves; the Inspector and the
+    // gizmo call it when they change a field directly. Call it before the change if the change
+    // also changes the selection: the step remembers what was selected before it.
+    void MarkChanged();
+    // Called once a frame, after every window: forgets the selection once its object is gone, and
+    // ends the edit in progress (taking its snapshot) once `userIsEditing` is false, that is, when
+    // no widget is held (ImGui::IsAnyItemActive).
+    void EndFrame(bool userIsEditing);
+
+    // Undo and Redo (Ctrl+Z, Ctrl+Y). Each replaces the scene with a snapshot, and selects what
+    // was selected then. Each first finishes an edit still in progress.
+    bool CanUndo() const { return m_Changing || !m_Undo.empty(); }
+    bool CanRedo() const { return !m_Redo.empty(); }
+    void Undo();
+    void Redo();
 
     // The edits. Each one selects what it made and marks the scene as changed.
 
@@ -74,7 +92,27 @@ public:
     void RemoveComponent(Viva::Component& component);
 
 private:
+    // The scene at one point in the history: its JSON as text (a tree of Json values would take
+    // many times the memory), and the Id of the object selected then (0 for none). Restoring it
+    // creates new GameObjects, so a pointer couldn't say which was selected; the Id can.
+    struct Snapshot {
+        std::string Scene;
+        uint64_t Selection = 0;
+        uint64_t Step = 0; // which state of the scene this is, for IsDirty
+    };
+
+    Snapshot TakeSnapshot();
+    void Restore(const Snapshot& snapshot);
+    void FinishChange(); // ends the edit in progress, if any, with a new snapshot
+    uint64_t SelectionId() const;
+
     Viva::Application& m_Application;
     Viva::GameObject* m_Selection = nullptr;
-    bool m_Dirty = false;
+
+    Snapshot m_Current;             // the scene as of the last finished edit (or load)
+    std::vector<Snapshot> m_Undo;   // the states before it, oldest first
+    std::vector<Snapshot> m_Redo;   // the states undone, most recently undone last
+    bool m_Changing = false;        // the scene changed since m_Current: an edit is in progress
+    uint64_t m_NextStep = 0;
+    uint64_t m_SavedStep = 0;       // the step that matches the file
 };

@@ -1,12 +1,10 @@
 #pragma once
 
 #include "EditorCamera.h"
-#include "Picking.h"
+#include "Gizmo.h"
+#include "SceneViewport.h"
 
-#include <glm/mat4x4.hpp>
-#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
-#include <imgui.h>
 
 class SceneEditor;
 
@@ -18,8 +16,9 @@ class Scene;
 
 // The Scene window: the scene, seen through the editor's camera. The renderer draws the scene into
 // an image of the window's size (Renderer::SetSceneTargetSize), and the window shows that image,
-// like a RenderTexture on a RawImage in Unity. Over the image it draws the selection's outline,
-// and a left click selects the object under the mouse.
+// like a RenderTexture on a RawImage in Unity. Over the image it draws the selection's outline and
+// the gizmo (M17); a left click selects the object under the mouse, or grabs a gizmo handle. A row
+// of tool buttons sits above the image.
 class SceneView {
 public:
     // Draws the window. `open` is the Window menu's flag (ImGui clears it when the window's tab is
@@ -30,6 +29,10 @@ public:
     // Hands the renderer the editor camera, from Application::OnRender, after the scene set its
     // own: the Scene view shows the scene from here, with the ground grid.
     void Render(Viva::Renderer& renderer, const Viva::Scene& scene) const;
+
+    // The tool keys, as in Unity: W, E and R pick Move, Rotate and Scale, and X switches between
+    // the object's axes and the world's. Not while flying, where W moves the camera.
+    void ReadToolKeys();
 
     // Puts the camera where the scene's main camera is, looking the same way, if there is one.
     void StartAtMainCamera(const Viva::Scene& scene);
@@ -42,20 +45,13 @@ public:
     bool IsFocused() const { return m_Focused; }
 
 private:
-    // The ray from the camera through a point of the image (in ImGui's screen coordinates).
-    Ray RayThrough(const ImVec2& point) const;
+    void DrawToolbar();
     // The selection's outline: the bounding boxes of everything it and the objects below it draw.
-    void DrawSelectionOutline(const SceneEditor& editor) const;
-    // A line between two points in the world, drawn over the image.
-    void DrawLine(ImDrawList& drawList, const glm::vec3& from, const glm::vec3& to, ImU32 color) const;
+    void DrawSelectionOutline(ImDrawList& drawList, const SceneEditor& editor) const;
 
     EditorCamera m_Camera;
-    bool m_Looking = false; // the right mouse button is held, flying the camera
+    Gizmo m_Gizmo;
+    SceneViewport m_Viewport; // this frame's image and camera
+    bool m_Looking = false;   // the right mouse button is held, flying the camera
     bool m_Focused = false;
-    // Where the image was drawn this frame, in ImGui's screen coordinates (points), and the
-    // camera's view and projection for it: what the outline and clicks need to map between the
-    // world and the image.
-    glm::vec2 m_ImageMin { 0.0f };
-    glm::vec2 m_ImageSize { 0.0f };
-    glm::mat4 m_ViewProjection { 1.0f };
 };

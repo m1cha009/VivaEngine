@@ -68,6 +68,21 @@ glm::quat Transform::GetRotation() const
     return m_Parent ? m_Parent->GetRotation() * LocalRotation : LocalRotation;
 }
 
+void Transform::SetPosition(const glm::vec3& worldPosition)
+{
+    // The parent's inverse world matrix takes a world point into the parent's space, where
+    // LocalPosition lives. (w = 1: it's a point, so the matrix moves it too.)
+    LocalPosition = m_Parent ? glm::vec3(glm::inverse(m_Parent->WorldMatrix()) * glm::vec4(worldPosition, 1.0f))
+                             : worldPosition;
+}
+
+void Transform::SetRotation(const glm::quat& worldRotation)
+{
+    // LocalRotation is relative to the parent, so the parent's rotation is taken back out: the
+    // inverse of a rotation undoes it.
+    LocalRotation = m_Parent ? glm::inverse(m_Parent->GetRotation()) * worldRotation : worldRotation;
+}
+
 void Transform::LookAt(const glm::vec3& worldPoint, const glm::vec3& worldUp)
 {
     // The wanted rotation, built from its three axes in world space (the columns of its matrix):
@@ -84,9 +99,7 @@ void Transform::LookAt(const glm::vec3& worldPoint, const glm::vec3& worldUp)
     const glm::vec3 y = glm::cross(z, x);
     const glm::quat worldRotation = glm::quat_cast(glm::mat3(x, y, z));
 
-    // LocalRotation is relative to the parent, so the parent's rotation is taken back out: the
-    // inverse of a rotation undoes it.
-    LocalRotation = m_Parent ? glm::inverse(m_Parent->GetRotation()) * worldRotation : worldRotation;
+    SetRotation(worldRotation);
 }
 
 void Transform::SetParent(Transform* parent, bool keepWorldPose)

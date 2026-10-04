@@ -322,7 +322,7 @@ void DrawInspectorWindow(SceneEditor& editor, std::span<const std::string> textu
         ImGui::PopID();
     }
     if (visitor.Changed())
-        editor.MarkDirty();
+        editor.MarkChanged(); // the undo step ends when the widget is let go (see SceneEditor)
     ImGui::PopItemWidth();
 
     // Add Component: a button the width of the window, opening the list of registered types.

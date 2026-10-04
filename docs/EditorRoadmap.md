@@ -123,11 +123,16 @@ way M17's gizmos will be drawn).
 
 The parts that make editing comfortable.
 
-- [ ] Move / Rotate / Scale gizmos, switched with W / E / R like Unity, in local or world space
-- [ ] Snapping while Ctrl is held (grid step, 15° angles)
-- [ ] **Undo / Redo** (Ctrl+Z / Ctrl+Y) for every edit: creating, deleting, reparenting,
+- [x] Move / Rotate / Scale gizmos, switched with W / E / R like Unity, in local or world space
+- [x] Snapping while Ctrl is held (grid step, 15° angles)
+- [x] **Undo / Redo** (Ctrl+Z / Ctrl+Y) for every edit: creating, deleting, reparenting,
       Inspector changes, gizmo drags. One gizmo drag is one undo step.
-- [ ] *You should see:* objects dragged into place with handles, and every change undoable
+- [x] *You should see:* objects dragged into place with handles, and every change undoable
+
+Done on 2026-10-04 (see [`milestones/M17.md`](milestones/M17.md)). Undo keeps snapshots of the
+scene (`Scene::Serialize`, which M18's Play mode reuses); GameObjects have Ids
+(`GameObject::GetId`), which snapshots keep. The local/global switch is X, as in Unity, plus a
+toolbar above the Scene view.
 
 ## M18: Play mode and builds
 

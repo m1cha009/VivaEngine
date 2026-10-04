@@ -1,6 +1,6 @@
 # Using VivaEngine
 
-How to build, run and make things with the engine, as of M16. The milestone docs in
+How to build, run and make things with the engine, as of M17. The milestone docs in
 [`milestones/`](milestones/) explain *why* things work the way they do; this page is the
 practical summary.
 
@@ -46,12 +46,14 @@ build\windows-debug\bin\Sandbox.exe
 opens the **Project Manager**, like Unity Hub: create a project, open it, remove it from the list
 or delete it from disk. A project is a folder with a `.vivaproject` file, an `Assets` folder (asset
 names start there) and `Scenes/Main.scene`. Opening one opens the editor: Scene (right mouse
-button to look, with W/A/S/D while held; click to select; F frames the selection; a ground grid),
+button to look, with W/A/S/D while held; click to select; F frames the selection; a ground grid;
+Move/Rotate/Scale gizmos on W/E/R, X for local/global, Ctrl to snap),
 Hierarchy (right-click to create, drag to reparent, F2 to rename), Inspector (edit any field, pick
 meshes and textures, Add/Remove Component), Project (double-click a scene to open it, a model to
 place it) and Console, docked, with File, Edit, GameObject and Window menus and a Save prompt for
-unsaved changes. Gizmos and undo come with M17 ([`EditorRoadmap.md`](EditorRoadmap.md)); see
-[M16](milestones/M16.md) for building a scene by hand. Options: `--open <folder>`,
+unsaved changes, and Undo/Redo (Ctrl+Z/Ctrl+Y) for every edit. Play mode comes with M18
+([`EditorRoadmap.md`](EditorRoadmap.md)); see [M16](milestones/M16.md) and [M17](milestones/M17.md)
+for building a scene by hand. Options: `--open <folder>`,
 `--settings <folder>` (where the project list lives, normally `%APPDATA%\Viva\VivaEditor`), and
 the common `--display`, `--no-vsync` and `--quit-after`. See [M14](milestones/M14.md).
 
@@ -141,6 +143,7 @@ and `"Primitives::Cylinder"`. Credits for third-party assets go in a `CREDITS.md
 | `transform.position`, `forward`, `rotation`, `LookAt`, `Find` | `GetPosition()`, `Forward()`, `GetRotation()`, `LookAt()`, `Find("a/b")` |
 | `Instantiate(prefab)` | `assets.GetModel("models/x.glb")->Instantiate(scene, parent)` |
 | `Instantiate(gameObject)` / `Destroy(component)` | `scene.Instantiate(gameObject, assets, parent)` / `scene.Destroy(component)` |
+| `transform.position = p` / `transform.rotation = r` / `GetInstanceID()` | `SetPosition(p)` / `SetRotation(r)` / `GetId()` |
 | `transform.SetParent(p, worldPositionStays)` / `mesh.bounds` | `SetParent(&p, keepWorldPose)` / `Renderer::GetBounds(mesh)` |
 | `Resources.Load<Texture2D>` / `new Texture2D` + `SetPixels32` | `assets.GetTexture(...)` / `renderer.CreateTexture(w, h, pixels)` |
 | `GameObject.CreatePrimitive(PrimitiveType.Cube)` | `assets.GetMesh("Primitives::Cube")` in a `MeshRenderer` |
@@ -169,7 +172,7 @@ and `"Primitives::Cylinder"`. Credits for third-party assets go in a `CREDITS.md
 
 - No lighting or shadows: everything is unlit, opaque texture × color.
 - No physics (collisions are your own box tests), audio, animation or skinning.
-- The editor builds scenes by hand, but has no gizmos or undo (M17) and no Play mode (M18) yet; see
+- The editor builds scenes by hand, with gizmos and undo, but has no Play mode (M18) yet; see
   [`EditorRoadmap.md`](EditorRoadmap.md).
 - One built-in shader (Unlit); games can't add their own yet.
 - Mirrored (negative scale) objects draw inside out.
@@ -179,9 +182,9 @@ The rest are the "Beyond M18" options in [`CLAUDE.md`](../CLAUDE.md).
 ## Where to read more
 
 - **Each milestone explained**, with Unity comparisons: [`milestones/M0.md`](milestones/M0.md) to
-  [`M16.md`](milestones/M16.md). M8 (renderer), M10 (scene), M11 (models), M13 (assets, scene
-  files), M14 (projects), M15 (the editor) and M16 (editing a scene) matter most for using the
-  engine.
+  [`M17.md`](milestones/M17.md). M8 (renderer), M10 (scene), M11 (models), M13 (assets, scene
+  files), M14 (projects), M15 (the editor), M16 (editing a scene) and M17 (gizmos, undo) matter most
+  for using the engine.
 - **Complete examples:** `sandbox/src/DemoScene.cpp` and `sandbox/src/LaneRunnerScene.cpp` in code,
   `assets/scenes/Shapes.scene` and `Demo.scene` as files.
 - **Every public header** in `engine/include/Viva/` is commented for exactly this use.

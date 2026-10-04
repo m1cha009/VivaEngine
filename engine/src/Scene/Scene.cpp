@@ -16,6 +16,7 @@ GameObject& Scene::CreateGameObject(std::string name, GameObject* parent)
     // when the vector grows: references to it stay valid.
     m_GameObjects.push_back(std::make_unique<GameObject>(*this, std::move(name)));
     GameObject& gameObject = *m_GameObjects.back();
+    gameObject.m_Id = m_NextId++;
     if (parent)
         gameObject.GetTransform().SetParent(&parent->GetTransform());
     return gameObject;
@@ -47,6 +48,15 @@ bool Scene::Contains(const GameObject* gameObject) const
     return std::ranges::any_of(m_GameObjects, [gameObject](const std::unique_ptr<GameObject>& candidate) {
         return candidate.get() == gameObject;
     });
+}
+
+GameObject* Scene::FindById(uint64_t id) const
+{
+    for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects) {
+        if (gameObject->GetId() == id && !gameObject->IsDestroyed())
+            return gameObject.get();
+    }
+    return nullptr;
 }
 
 Camera* Scene::GetMainCamera() const

@@ -1,10 +1,12 @@
 #include "SceneView.h"
 
+#include "EditorUi.h"
 #include "Picking.h"
 #include "SceneEditor.h"
 
 #include "Viva/Camera.h"
 #include "Viva/GameObject.h"
+#include "Viva/Input.h"
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
 #include "Viva/Transform.h"
@@ -33,6 +35,19 @@ constexpr float kPlacementDistance = 8.0f;
 // The selection's outline: Unity's orange.
 const ImU32 kSelectionColor = IM_COL32(255, 140, 0, 255);
 
+// The tools, with their toolbar labels and keys: one table, so the key a button shows is the one
+// that works.
+struct ToolInfo {
+    GizmoTool Tool;
+    const char* Label;
+    Key ShortcutKey;
+};
+constexpr ToolInfo kTools[] = {
+    { GizmoTool::Move, "Move (W)", Key::W },
+    { GizmoTool::Rotate, "Rotate (E)", Key::E },
+    { GizmoTool::Scale, "Scale (R)", Key::R },
+};
+
 } // namespace
 
 void SceneView::Draw(Renderer& renderer, SceneEditor& editor, bool* open)
@@ -43,29 +58,54 @@ void SceneView::Draw(Renderer& renderer, SceneEditor& editor, bool* open)
     ImGui::PopStyleVar();
     bool hovered = false; // the mouse is over the scene's image
     if (visible) {
-        // The image is as big as the space the window has, in pixels: ImGui works in points, which
-        // a Retina screen has two pixels per. The renderer makes an image of that size for the next
-        // frame; this frame shows the current one, stretched if the size just changed.
+        DrawToolbar();
+
+        // The image is as big as the space the window has left, in pixels: ImGui works in points,
+        // which a Retina screen has two pixels per. The renderer makes an image of that size for
+        // the next frame; this frame shows the current one, stretched if the size just changed.
         const ImVec2 size = ImGui::GetContentRegionAvail();
         const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
         const auto width = static_cast<uint32_t>(std::max(size.x * scale.x, 0.0f));
         const auto height = static_cast<uint32_t>(std::max(size.y * scale.y, 0.0f));
         renderer.SetSceneTargetSize(width, height);
         if (const uint64_t texture = renderer.GetSceneTexture(); texture != 0 && width > 0 && height > 0) {
+            // The image area is an invisible button that takes the left mouse button: an ImGui
+            // item, so ImGui knows when a press on it starts (IsItemActivated), lasts (IsItemActive)
+            // and ends, as for any button. A gizmo drag is exactly that. While it's held, the
+            // window doesn't move, and the editor knows not to end the undo step yet. The picture
+            // is drawn on it with the draw list.
             const ImVec2 min = ImGui::GetCursorScreenPos();
-            ImGui::Image(ImTextureRef(static_cast<ImTextureID>(texture)), size);
+            ImGui::InvisibleButton("SceneImage", size, ImGuiButtonFlags_MouseButtonLeft);
             hovered = ImGui::IsItemHovered();
-            m_ImageMin = { min.x, min.y };
-            m_ImageSize = { size.x, size.y };
-            m_ViewProjection = m_Camera.ProjectionMatrix(size.x / size.y) * m_Camera.ViewMatrix();
+            const bool pressed = ImGui::IsItemActivated();
+            const bool held = ImGui::IsItemActive();
+            ImDrawList& drawList = *ImGui::GetWindowDrawList();
+            drawList.AddImage(ImTextureRef(static_cast<ImTextureID>(texture)), min, ImVec2(min.x + size.x, min.y + size.y));
 
-            DrawSelectionOutline(editor);
+            m_Viewport = {
+                .ImageMin = { min.x, min.y },
+                .ImageSize = { size.x, size.y },
+                .View = m_Camera.ViewMatrix(),
+                .Projection = m_Camera.ProjectionMatrix(size.x / size.y),
+                .CameraPosition = m_Camera.Position,
+            };
 
-            // A left click selects what's under the mouse, or nothing if it's empty space, as in
-            // Unity. ImGui sees the click first, so it doesn't reach the scene when it lands on
-            // another window in front of the image.
-            if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-                editor.Select(PickGameObject(editor.GetScene(), RayThrough(ImGui::GetMousePos())));
+            // The outline and the gizmo are clipped to the image, so they don't spill over the
+            // window's edges.
+            drawList.PushClipRect(min, ImVec2(min.x + size.x, min.y + size.y), true);
+            DrawSelectionOutline(drawList, editor);
+            const glm::vec2 mouse(ImGui::GetMousePos().x, ImGui::GetMousePos().y);
+            if (GameObject* selection = editor.GetSelection()) {
+                const GizmoInput input { .Mouse = mouse, .Pressed = pressed, .Held = held, .Snap = IsCtrlHeld() };
+                if (m_Gizmo.Update(m_Viewport, drawList, selection->GetTransform(), input))
+                    editor.MarkChanged();
+            }
+            drawList.PopClipRect();
+
+            // A press that didn't grab a handle selects what's under the mouse, or nothing if it's
+            // empty space, as in Unity.
+            if (pressed && !m_Gizmo.IsDragging())
+                editor.Select(PickGameObject(editor.GetScene(), m_Viewport.RayThrough(mouse)));
         }
     }
     m_Focused = visible && (hovered || ImGui::IsWindowFocused());
@@ -80,63 +120,54 @@ void SceneView::Draw(Renderer& renderer, SceneEditor& editor, bool* open)
     }
 }
 
-Ray SceneView::RayThrough(const ImVec2& point) const
+void SceneView::DrawToolbar()
 {
-    // The point in "normalized device coordinates": -1 to 1 across the image, and -1 to 1 from its
-    // bottom to its top (the projection is OpenGL-style, y up, while screen y runs down).
-    const glm::vec2 uv = (glm::vec2(point.x, point.y) - m_ImageMin) / m_ImageSize;
-    const glm::vec2 ndc(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
-    // The projection squeezed everything the camera sees into a box where depth runs from 0 (the
-    // near plane) to 1 (the far plane). Its inverse takes that box back into the world: the point
-    // at depth 0 lies on the near plane, the one at depth 1 on the far plane, and the ray runs
-    // from one to the other. The division by w undoes the perspective divide.
-    const glm::mat4 toWorld = glm::inverse(m_ViewProjection);
-    glm::vec4 nearPoint = toWorld * glm::vec4(ndc, 0.0f, 1.0f);
-    glm::vec4 farPoint = toWorld * glm::vec4(ndc, 1.0f, 1.0f);
-    nearPoint /= nearPoint.w;
-    farPoint /= farPoint.w;
-    return { .Origin = glm::vec3(nearPoint), .Direction = glm::normalize(glm::vec3(farPoint - nearPoint)) };
+    // A row of buttons above the image, inset by the usual spacing (the window has no padding).
+    // The current tool's button is drawn as pressed.
+    // (SetCursorPos counts from the window's corner, title bar included, so this starts from where
+    // the content begins.)
+    const ImVec2 spacing = ImGui::GetStyle().ItemSpacing;
+    const ImVec2 start = ImGui::GetCursorPos();
+    ImGui::SetCursorPos(ImVec2(start.x + spacing.x, start.y + spacing.y));
+    for (const ToolInfo& tool : kTools) {
+        const bool current = m_Gizmo.Tool == tool.Tool;
+        if (current)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        if (ImGui::Button(tool.Label))
+            m_Gizmo.Tool = tool.Tool;
+        if (current)
+            ImGui::PopStyleColor();
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(m_Gizmo.Local ? "Local (X)" : "Global (X)"))
+        m_Gizmo.Local = !m_Gizmo.Local;
+    ImGui::SameLine();
+    ImGui::TextDisabled("Hold Ctrl to snap");
+    // The next line starts at the window's left edge again (it has no padding), so the image
+    // below fills the width.
 }
 
-void SceneView::DrawLine(ImDrawList& drawList, const glm::vec3& from, const glm::vec3& to, ImU32 color) const
+void SceneView::ReadToolKeys()
 {
-    // Into clip space, where the near plane is z = 0 and everything in front of the camera has
-    // z >= 0. A line reaching behind the camera is cut where it crosses the near plane first:
-    // projecting a point behind the camera would flip it to the wrong side of the picture.
-    glm::vec4 a = m_ViewProjection * glm::vec4(from, 1.0f);
-    glm::vec4 b = m_ViewProjection * glm::vec4(to, 1.0f);
-    if (a.z < 0.0f && b.z < 0.0f)
-        return; // all behind
-    if (a.z < 0.0f)
-        a = glm::mix(a, b, a.z / (a.z - b.z));
-    else if (b.z < 0.0f)
-        b = glm::mix(b, a, b.z / (b.z - a.z));
-
-    // Then onto the image: divide by w (the perspective divide), and map -1..1 to its corners.
-    const auto toImage = [this](const glm::vec4& clip) {
-        const glm::vec2 ndc = glm::vec2(clip) / clip.w;
-        return ImVec2(m_ImageMin.x + (ndc.x * 0.5f + 0.5f) * m_ImageSize.x,
-                      m_ImageMin.y + (0.5f - ndc.y * 0.5f) * m_ImageSize.y);
-    };
-    drawList.AddLine(toImage(a), toImage(b), color, 1.5f);
+    if (m_Looking)
+        return;
+    for (const ToolInfo& tool : kTools) {
+        if (Input::GetKeyDown(tool.ShortcutKey))
+            m_Gizmo.Tool = tool.Tool;
+    }
+    if (Input::GetKeyDown(Key::X))
+        m_Gizmo.Local = !m_Gizmo.Local;
 }
 
-void SceneView::DrawSelectionOutline(const SceneEditor& editor) const
+void SceneView::DrawSelectionOutline(ImDrawList& drawList, const SceneEditor& editor) const
 {
     const GameObject* selection = editor.GetSelection();
     if (!selection)
         return;
-
-    // Lines drawn with ImGui's draw list, over the image, rather than by the renderer into it: they
-    // stay visible behind other objects, and need no 3D line drawing. M17's gizmos work the same
-    // way. Clipped to the image, so they don't spill over the window's edges.
-    ImDrawList& drawList = *ImGui::GetWindowDrawList();
-    drawList.PushClipRect(ImVec2(m_ImageMin.x, m_ImageMin.y),
-                          ImVec2(m_ImageMin.x + m_ImageSize.x, m_ImageMin.y + m_ImageSize.y), true);
-
     // Each box the selection and the objects below it draw (they move with it), as it lies in the
     // world: its 12 edges join the corners whose numbers differ in exactly one bit (see
-    // Bounds::Corner).
+    // Bounds::Corner). Drawn with ImGui's draw list over the image, rather than by the renderer
+    // into it, they stay visible behind other objects and need no 3D line drawing.
     ForEachDrawnBox(*selection, true, [&](const Bounds& bounds, const glm::mat4& world) {
         glm::vec3 corners[8];
         for (int i = 0; i < 8; ++i)
@@ -144,11 +175,10 @@ void SceneView::DrawSelectionOutline(const SceneEditor& editor) const
         for (int i = 0; i < 8; ++i) {
             for (int bit = 1; bit < 8; bit <<= 1) {
                 if (!(i & bit))
-                    DrawLine(drawList, corners[i], corners[i | bit], kSelectionColor);
+                    m_Viewport.DrawLine(drawList, corners[i], corners[i | bit], kSelectionColor);
             }
         }
     });
-    drawList.PopClipRect();
 }
 
 void SceneView::Update(float dt)

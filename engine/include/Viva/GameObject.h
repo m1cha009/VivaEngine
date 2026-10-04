@@ -3,6 +3,7 @@
 #include "Viva/Component.h"
 #include "Viva/Transform.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -26,6 +27,12 @@ public:
 
     const std::string& GetName() const { return m_Name; }
     void SetName(std::string name) { m_Name = std::move(name); }
+
+    // A number that identifies the object in its scene, given when it's created and never reused
+    // for another (Unity's GetInstanceID). Unlike the object's address, it survives the scene
+    // being restored from a snapshot (Scene::Serialize with Ids): the editor's undo finds its
+    // selection again by it.
+    uint64_t GetId() const { return m_Id; }
 
     // Two versions: a const GameObject hands out a const Transform, which can be read but not changed.
     Transform& GetTransform() { return m_Transform; }
@@ -75,6 +82,7 @@ private:
     // Declared in this order because they're initialized in this order: m_Transform takes the
     // GameObject it belongs to, and the others are ready by then.
     Scene* m_Scene;
+    uint64_t m_Id = 0; // set by the scene
     std::string m_Name;
     Transform m_Transform;
     std::vector<std::unique_ptr<Component>> m_Components;

@@ -241,8 +241,7 @@ void EditorApp::AskToSaveThen(std::function<void()> action)
 
 void EditorApp::DrawEditor(float dt)
 {
-    m_Editor->Update();
-    DrawMenuBar();
+    std::optional<EditCommand> command = DrawMenuBar();
     if (!m_Project)
         return; // the menu closed it
 
@@ -258,9 +257,10 @@ void EditorApp::DrawEditor(float dt)
     m_SceneView.Update(dt);
     if (m_Show.Scene)
         m_SceneView.Draw(GetRenderer(), *m_Editor, &m_Show.Scene);
-    std::optional<EditCommand> command;
-    if (m_Show.Hierarchy)
-        command = m_Hierarchy.Draw(*m_Editor, m_SceneView.GetPlacement(), &m_Show.Hierarchy);
+    if (m_Show.Hierarchy) {
+        if (const std::optional<EditCommand> clicked = m_Hierarchy.Draw(*m_Editor, m_SceneView.GetPlacement(), &m_Show.Hierarchy))
+            command = clicked;
+    }
     if (m_Show.Inspector)
         DrawInspectorWindow(*m_Editor, m_ProjectWindow.GetTextureNames(), &m_Show.Inspector);
     if (m_Show.Project) {
@@ -270,19 +270,30 @@ void EditorApp::DrawEditor(float dt)
     if (m_Show.Console)
         m_Console.Draw(&m_Show.Console);
 
-    // The Edit keys (F, F2, Del, Ctrl+D), as in Unity, while the Hierarchy or the Scene view has
-    // the focus: Del in another window's text field doesn't delete the selection. Commands run
-    // after the windows have drawn, so none of them changes the scene in the middle of a window.
-    if (!command && (m_Hierarchy.IsFocused() || m_SceneView.IsFocused()))
-        command = ReadEditShortcut();
+    // The keys, as in Unity: the Edit commands (see ReadEditShortcut), and W, E, R and X for the
+    // gizmo, which act on the selection only while the Hierarchy or the Scene view has the focus.
+    // Not while a widget is held: in the middle of a gizmo drag, Ctrl+Z or Del would pull the
+    // object out from under it. Commands run after the windows have drawn, so none of them
+    // changes the scene in the middle of a window.
+    const bool selectionKeys = m_Hierarchy.IsFocused() || m_SceneView.IsFocused();
+    if (!ImGui::IsAnyItemActive()) {
+        if (!command)
+            command = ReadEditShortcut(selectionKeys);
+        if (selectionKeys)
+            m_SceneView.ReadToolKeys();
+    }
     if (command)
         RunEditCommand(*command);
 
     DrawSavePrompt();
+
+    // The frame's edits are done: once nothing is held any more, they become one undo step.
+    m_Editor->EndFrame(ImGui::IsAnyItemActive());
 }
 
-void EditorApp::DrawMenuBar()
+std::optional<EditCommand> EditorApp::DrawMenuBar()
 {
+    std::optional<EditCommand> command; // the Edit menu's item clicked, run after the windows
     // Keyboard shortcuts work anywhere in the editor (RouteGlobal), menu open or not.
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
         NewScene();
@@ -294,7 +305,7 @@ void EditorApp::DrawMenuBar()
         SaveSceneAs();
 
     if (!ImGui::BeginMainMenuBar())
-        return;
+        return command;
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("New Scene", "Ctrl+N"))
             NewScene();
@@ -313,8 +324,12 @@ void EditorApp::DrawMenuBar()
     // Edit and GameObject, as in Unity. The Edit menu's items are shared with the Hierarchy's
     // right-click menu (see EditorMenus.h).
     if (ImGui::BeginMenu("Edit")) {
-        if (const std::optional<EditCommand> command = DrawEditMenuItems(m_Editor->GetSelection() != nullptr))
-            RunEditCommand(*command);
+        const EditMenuState state {
+            .HasSelection = m_Editor->GetSelection() != nullptr,
+            .CanUndo = m_Editor->CanUndo(),
+            .CanRedo = m_Editor->CanRedo(),
+        };
+        command = DrawEditMenuItems(state, false);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("GameObject")) {
@@ -338,6 +353,7 @@ void EditorApp::DrawMenuBar()
         ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();
+    return command;
 }
 
 void EditorApp::DrawSavePrompt()
@@ -386,9 +402,15 @@ void EditorApp::UpdateTitle()
 void EditorApp::RunEditCommand(EditCommand command)
 {
     GameObject* selection = m_Editor->GetSelection();
-    if (!selection)
+    if (!selection && command != EditCommand::Undo && command != EditCommand::Redo)
         return;
     switch (command) {
+    case EditCommand::Undo:
+        m_Editor->Undo();
+        break;
+    case EditCommand::Redo:
+        m_Editor->Redo();
+        break;
     case EditCommand::Duplicate:
         m_Editor->Duplicate(*selection);
         break;

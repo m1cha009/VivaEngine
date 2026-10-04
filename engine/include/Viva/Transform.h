@@ -61,6 +61,10 @@ public:
     glm::vec3 Up() const;
     // The rotation in world space (Unity's rotation): the parent's, then this one's own.
     glm::quat GetRotation() const;
+    // Move or turn the object to this position or rotation in world space, whatever its parent:
+    // the local values are worked out from them (Unity's position and rotation setters).
+    void SetPosition(const glm::vec3& worldPosition);
+    void SetRotation(const glm::quat& worldRotation);
 
     // Turns the object so its Forward points at `worldPoint`, with its Up as close to `worldUp`
     // as that allows: Unity's transform.LookAt. Looking straight along `worldUp` (or at its own

@@ -2,14 +2,17 @@
 
 #include "Viva/GameObject.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Viva {
 
 class Assets;
 class Camera;
+class Json;
 class Renderer;
 
 // The game world: every GameObject, which the scene owns (Unity's scene). Application has one;
@@ -44,6 +47,9 @@ public:
     // gone: it's how code that keeps pointers to objects others may destroy (the debug windows'
     // Destroy button) can tell, like Unity's "== null" check on a destroyed object.
     bool Contains(const GameObject* gameObject) const;
+    // The GameObject with this Id (see GameObject::GetId), or nullptr if there's none, or it was
+    // destroyed.
+    GameObject* FindById(uint64_t id) const;
 
     // Creates a copy of `original` and of everything below it, below `parent` (or as a root
     // object): the same name, active flag, Transform values and components, with the same field
@@ -79,6 +85,17 @@ public:
     // update, as for objects created in code.
     bool Load(const std::string& path, Assets& assets);
 
+    // The same, in memory: the scene as the JSON a scene file holds, and the GameObjects of such
+    // JSON added to the scene. Save and Load are these plus the file. The editor keeps them as
+    // undo steps (M17), and Play mode will restore the scene from one (M18). Deserialize returns
+    // false (after logging why, naming `source`) if the JSON isn't a scene.
+    //
+    // withIds: also write each GameObject's Id, and Deserialize gives the objects it makes those
+    // Ids again. That's for snapshots of this scene, restored after Clear (the old objects are
+    // gone by then); scene files leave Ids out, and objects loaded from them get new ones.
+    Json Serialize(bool withIds = false) const;
+    bool Deserialize(const Json& json, Assets& assets, std::string_view source);
+
 private:
     // The engine side, used by Application's main loop.
     friend class Application;
@@ -90,8 +107,12 @@ private:
 
     void StartNewComponents();
     void RemoveDestroyed();
+    // Scene files (SceneFile.cpp): creates the GameObject `json` describes, below `parent`, and
+    // everything below it. Returns it, or nullptr if `json` isn't a GameObject.
+    GameObject* LoadGameObject(const Json& json, GameObject* parent, Assets& assets);
 
     std::vector<std::unique_ptr<GameObject>> m_GameObjects;
+    uint64_t m_NextId = 1; // the Id the next GameObject gets
 };
 
 } // namespace Viva
