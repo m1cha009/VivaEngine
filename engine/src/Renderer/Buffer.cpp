@@ -96,14 +96,15 @@ Buffer::~Buffer()
     vmaDestroyBuffer(m_Allocator, m_Buffer, m_Allocation);
 }
 
-void Buffer::Write(std::span<const std::byte> data)
+void Buffer::Write(std::span<const std::byte> data, VkDeviceSize offset)
 {
     VIVA_ASSERT(m_Mapped, "only CpuToGpu buffers can be written by the CPU");
-    VIVA_ASSERT(data.size() <= m_Size, "writing {} bytes into a {}-byte buffer", data.size(), m_Size);
-    std::memcpy(m_Mapped, data.data(), data.size());
+    VIVA_ASSERT(offset + data.size() <= m_Size, "writing {} bytes at {} into a {}-byte buffer", data.size(), offset,
+                m_Size);
+    std::memcpy(static_cast<std::byte*>(m_Mapped) + offset, data.data(), data.size());
     // VMA may have picked memory that isn't HOST_COHERENT. Then the CPU's writes only reach the
     // GPU after a flush. On coherent memory this does nothing.
-    VK_CHECK(vmaFlushAllocation(m_Allocator, m_Allocation, 0, data.size()));
+    VK_CHECK(vmaFlushAllocation(m_Allocator, m_Allocation, offset, data.size()));
 }
 
 } // namespace Viva

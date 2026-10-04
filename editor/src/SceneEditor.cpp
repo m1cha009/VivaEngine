@@ -110,6 +110,8 @@ void SceneEditor::MarkClean()
 
 void SceneEditor::MarkChanged()
 {
+    if (m_Playing)
+        return; // undone by EndPlay anyway
     // The first change of an edit: the step before it remembers what was selected until now.
     if (!m_Changing) {
         m_Current.Selection = SelectionId();
@@ -144,8 +146,33 @@ void SceneEditor::FinishChange()
     m_Redo.clear();
 }
 
+void SceneEditor::BeginPlay()
+{
+    FinishChange();
+    m_Playing = true;
+    SetPaused(false);
+}
+
+void SceneEditor::SetPaused(bool paused)
+{
+    m_Paused = paused;
+    m_Application.SetSceneUpdating(m_Playing && !m_Paused);
+}
+
+void SceneEditor::EndPlay()
+{
+    m_Playing = false;
+    SetPaused(false);
+    const uint64_t selected = SelectionId();
+    Restore(m_Current);
+    if (GameObject* again = GetScene().FindById(selected))
+        m_Selection = again;
+}
+
 void SceneEditor::Undo()
 {
+    if (m_Playing)
+        return;
     FinishChange(); // an edit still in progress is undone too
     if (m_Undo.empty())
         return;
@@ -157,6 +184,8 @@ void SceneEditor::Undo()
 
 void SceneEditor::Redo()
 {
+    if (m_Playing)
+        return;
     FinishChange(); // a real edit in progress makes the undone steps unreachable
     if (m_Redo.empty())
         return;

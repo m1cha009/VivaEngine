@@ -1,6 +1,6 @@
 # Using VivaEngine
 
-How to build, run and make things with the engine, as of M17. The milestone docs in
+How to build, run and make things with the engine, as of M18. The milestone docs in
 [`milestones/`](milestones/) explain *why* things work the way they do; this page is the
 practical summary.
 
@@ -51,9 +51,12 @@ Move/Rotate/Scale gizmos on W/E/R, X for local/global, Ctrl to snap),
 Hierarchy (right-click to create, drag to reparent, F2 to rename), Inspector (edit any field, pick
 meshes and textures, Add/Remove Component), Project (double-click a scene to open it, a model to
 place it) and Console, docked, with File, Edit, GameObject and Window menus and a Save prompt for
-unsaved changes, and Undo/Redo (Ctrl+Z/Ctrl+Y) for every edit. Play mode comes with M18
-([`EditorRoadmap.md`](EditorRoadmap.md)); see [M16](milestones/M16.md) and [M17](milestones/M17.md)
-for building a scene by hand. Options: `--open <folder>`,
+unsaved changes, and Undo/Redo (Ctrl+Z/Ctrl+Y) for every edit. **Play** (Ctrl+P) runs the scene in
+the Game view and **Stop** puts it back ([M18](milestones/M18.md)); **File > Build...** makes a
+folder that runs the project without the editor, through **VivaPlayer**
+(`VivaPlayer --project <folder>` plays a project folder directly). See [M16](milestones/M16.md) and
+[M17](milestones/M17.md) for building a scene by hand. Options: `--open <folder>`,
+`--build <folder>` (with `--open`: build, then quit),
 `--settings <folder>` (where the project list lives, normally `%APPDATA%\Viva\VivaEditor`), and
 the common `--display`, `--no-vsync` and `--quit-after`. See [M14](milestones/M14.md).
 
@@ -172,7 +175,8 @@ and `"Primitives::Cylinder"`. Credits for third-party assets go in a `CREDITS.md
 
 - No lighting or shadows: everything is unlit, opaque texture × color.
 - No physics (collisions are your own box tests), audio, animation or skinning.
-- The editor builds scenes by hand, with gizmos and undo, but has no Play mode (M18) yet; see
+- Projects are data only: their scenes use the engine's components (MeshRenderer, Camera, Spinner,
+  FlyCamera). A project's own C++ code is the first "Later" item in
   [`EditorRoadmap.md`](EditorRoadmap.md).
 - One built-in shader (Unlit); games can't add their own yet.
 - Mirrored (negative scale) objects draw inside out.
@@ -182,9 +186,9 @@ The rest are the "Beyond M18" options in [`CLAUDE.md`](../CLAUDE.md).
 ## Where to read more
 
 - **Each milestone explained**, with Unity comparisons: [`milestones/M0.md`](milestones/M0.md) to
-  [`M17.md`](milestones/M17.md). M8 (renderer), M10 (scene), M11 (models), M13 (assets, scene
-  files), M14 (projects), M15 (the editor), M16 (editing a scene) and M17 (gizmos, undo) matter most
-  for using the engine.
+  [`M18.md`](milestones/M18.md). M8 (renderer), M10 (scene), M11 (models), M13 (assets, scene
+  files), M14 (projects), M15 (the editor), M16 (editing a scene), M17 (gizmos, undo) and M18 (Play
+  mode, builds) matter most for using the engine.
 - **Complete examples:** `sandbox/src/DemoScene.cpp` and `sandbox/src/LaneRunnerScene.cpp` in code,
   `assets/scenes/Shapes.scene` and `Demo.scene` as files.
 - **Every public header** in `engine/include/Viva/` is commented for exactly this use.

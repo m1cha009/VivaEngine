@@ -1,6 +1,6 @@
 #version 450
 
-// The editor's ground grid (Renderer::DrawGrid): one big square on the plane y = 0, centered
+// The editor's ground grid (RenderView::Grid, see Renderer::DrawScene): one big square on the plane y = 0, centered
 // under the camera, so wherever the camera goes the grid reaches the horizon. The lines
 // themselves are drawn by the fragment shader, pixel by pixel.
 

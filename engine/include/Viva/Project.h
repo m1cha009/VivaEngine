@@ -13,8 +13,8 @@ namespace Viva {
 //     └── Scenes/
 //         └── Main.scene       a scene file (M13), the one that opens first
 //
-// The editor (VivaEditor) creates and opens projects; the player (M18) will run them. A Project
-// only describes the folder, so it's a plain value to copy around, not a resource to own.
+// The editor (VivaEditor) creates and opens projects; the player (VivaPlayer, M18) runs them. A
+// Project only describes the folder, so it's a plain value to copy around, not a resource to own.
 class Project {
 public:
     // Creates a new project in parentFolder/name/: the folders, the project file, and a first

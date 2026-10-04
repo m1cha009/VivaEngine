@@ -6,19 +6,22 @@
 
 #include <glm/vec3.hpp>
 
+#include <memory>
+
 class SceneEditor;
 
 namespace Viva {
 class GameObject;
 class Renderer;
+class RenderTarget;
 class Scene;
 }
 
 // The Scene window: the scene, seen through the editor's camera. The renderer draws the scene into
-// an image of the window's size (Renderer::SetSceneTargetSize), and the window shows that image,
-// like a RenderTexture on a RawImage in Unity. Over the image it draws the selection's outline and
-// the gizmo (M17); a left click selects the object under the mouse, or grabs a gizmo handle. A row
-// of tool buttons sits above the image.
+// an image of the window's size (a render target, Renderer::DrawScene), and the window shows that
+// image, like a RenderTexture on a RawImage in Unity. Over the image it draws the selection's
+// outline and the gizmo (M17); a left click selects the object under the mouse, or grabs a gizmo
+// handle. A row of tool buttons sits above the image.
 class SceneView {
 public:
     // Draws the window. `open` is the Window menu's flag (ImGui clears it when the window's tab is
@@ -26,9 +29,6 @@ public:
     void Draw(Viva::Renderer& renderer, SceneEditor& editor, bool* open);
     // Flies the camera (while the right mouse button, pressed over the view, is held).
     void Update(float dt);
-    // Hands the renderer the editor camera, from Application::OnRender, after the scene set its
-    // own: the Scene view shows the scene from here, with the ground grid.
-    void Render(Viva::Renderer& renderer, const Viva::Scene& scene) const;
 
     // The tool keys, as in Unity: W, E and R pick Move, Rotate and Scale, and X switches between
     // the object's axes and the world's. Not while flying, where W moves the camera.
@@ -50,6 +50,7 @@ private:
     void DrawSelectionOutline(ImDrawList& drawList, const SceneEditor& editor) const;
 
     EditorCamera m_Camera;
+    std::shared_ptr<Viva::RenderTarget> m_Target; // made on first use, when the renderer exists
     Gizmo m_Gizmo;
     SceneViewport m_Viewport; // this frame's image and camera
     bool m_Looking = false;   // the right mouse button is held, flying the camera

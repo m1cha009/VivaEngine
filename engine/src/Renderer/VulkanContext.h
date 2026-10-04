@@ -51,6 +51,8 @@ public:
     VmaAllocator GetAllocator() const { return m_Allocator; }
     // The strongest anisotropic filtering samplers may use, or 0 if the GPU has none.
     float GetMaxSamplerAnisotropy() const { return m_MaxSamplerAnisotropy; }
+    // Offsets into uniform buffers must be multiples of this (see FrameUniforms).
+    uint32_t GetUniformBufferAlignment() const { return m_UniformBufferAlignment; }
 
     // Records commands with `record`, runs them on the graphics queue and waits until the GPU has
     // finished them. For one-off work while loading, like copying data into GPU memory
@@ -76,6 +78,7 @@ private:
     VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
     VkQueue m_PresentQueue = VK_NULL_HANDLE;
     float m_MaxSamplerAnisotropy = 0.0f;
+    uint32_t m_UniformBufferAlignment = 256;
     VmaAllocator m_Allocator = VK_NULL_HANDLE;
 };
 

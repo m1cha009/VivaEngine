@@ -19,27 +19,43 @@ constexpr NewObjectInfo kNewObjects[] = {
 };
 
 // Each Edit command with its menu label and its key: one table for the menu and the keyboard, so
-// the shortcut a menu item shows is the one that works. The rest act on the selection.
+// the shortcut a menu item shows is the one that works.
 struct EditCommandInfo {
     EditCommand Command;
     const char* Label;
     const char* ShortcutText;
     Key ShortcutKey;
-    bool Ctrl;
-    bool SeparatorBefore; // a line above it in the menu
+    bool Ctrl = false;
+    bool Shift = false;
+    bool OnSelection = false;     // acts on the selection: needs one, and its key only works in some windows
+    bool SeparatorBefore = false; // a line above it in the menu
 };
 constexpr EditCommandInfo kEditCommands[] = {
-    { EditCommand::Undo, "Undo", "Ctrl+Z", Key::Z, true, false },
-    { EditCommand::Redo, "Redo", "Ctrl+Y", Key::Y, true, false },
-    { EditCommand::Duplicate, "Duplicate", "Ctrl+D", Key::D, true, true },
-    { EditCommand::Rename, "Rename", "F2", Key::F2, false, false },
-    { EditCommand::Delete, "Delete", "Del", Key::Delete, false, false },
-    { EditCommand::FrameSelected, "Frame Selected", "F", Key::F, false, true },
+    { .Command = EditCommand::Undo, .Label = "Undo", .ShortcutText = "Ctrl+Z", .ShortcutKey = Key::Z,
+      .Ctrl = true },
+    { .Command = EditCommand::Redo, .Label = "Redo", .ShortcutText = "Ctrl+Y", .ShortcutKey = Key::Y,
+      .Ctrl = true },
+    { .Command = EditCommand::Play, .Label = "Play", .ShortcutText = "Ctrl+P", .ShortcutKey = Key::P,
+      .Ctrl = true, .SeparatorBefore = true },
+    { .Command = EditCommand::Pause, .Label = "Pause", .ShortcutText = "Ctrl+Shift+P", .ShortcutKey = Key::P,
+      .Ctrl = true, .Shift = true },
+    { .Command = EditCommand::Duplicate, .Label = "Duplicate", .ShortcutText = "Ctrl+D", .ShortcutKey = Key::D,
+      .Ctrl = true, .OnSelection = true, .SeparatorBefore = true },
+    { .Command = EditCommand::Rename, .Label = "Rename", .ShortcutText = "F2", .ShortcutKey = Key::F2,
+      .OnSelection = true },
+    { .Command = EditCommand::Delete, .Label = "Delete", .ShortcutText = "Del", .ShortcutKey = Key::Delete,
+      .OnSelection = true },
+    { .Command = EditCommand::FrameSelected, .Label = "Frame Selected", .ShortcutText = "F", .ShortcutKey = Key::F,
+      .OnSelection = true, .SeparatorBefore = true },
 };
 
-bool IsUndoOrRedo(EditCommand command)
+const EditCommandInfo& GetInfo(EditCommand command)
 {
-    return command == EditCommand::Undo || command == EditCommand::Redo;
+    for (const EditCommandInfo& info : kEditCommands) {
+        if (info.Command == command)
+            return info;
+    }
+    return kEditCommands[0]; // every command is in the table
 }
 
 } // namespace
@@ -70,21 +86,43 @@ std::optional<NewObject> DrawCreateMenuItems()
     return clicked;
 }
 
+bool ActsOnSelection(EditCommand command)
+{
+    return GetInfo(command).OnSelection;
+}
+
 std::optional<EditCommand> DrawEditMenuItems(const EditMenuState& state, bool selectionOnly)
 {
     std::optional<EditCommand> clicked;
     bool first = true;
     for (const EditCommandInfo& info : kEditCommands) {
-        if (selectionOnly && IsUndoOrRedo(info.Command))
+        if (selectionOnly && !info.OnSelection)
             continue;
         if (info.SeparatorBefore && !first)
             ImGui::Separator();
         first = false;
-        const bool enabled = info.Command == EditCommand::Undo   ? state.CanUndo
-                             : info.Command == EditCommand::Redo ? state.CanRedo
-                                                                 : state.HasSelection;
-        // The last argument greys the item out when it can't do anything.
-        if (ImGui::MenuItem(info.Label, info.ShortcutText, false, enabled))
+        bool enabled = state.HasSelection;
+        bool checked = false;
+        switch (info.Command) {
+        case EditCommand::Undo:
+            enabled = state.CanUndo;
+            break;
+        case EditCommand::Redo:
+            enabled = state.CanRedo;
+            break;
+        case EditCommand::Play:
+            enabled = true;
+            checked = state.Playing;
+            break;
+        case EditCommand::Pause:
+            enabled = state.Playing;
+            checked = state.Paused;
+            break;
+        default:
+            break;
+        }
+        // A check mark when `checked`; greyed out when it can't do anything.
+        if (ImGui::MenuItem(info.Label, info.ShortcutText, checked, enabled))
             clicked = info.Command;
     }
     return clicked;
@@ -93,8 +131,10 @@ std::optional<EditCommand> DrawEditMenuItems(const EditMenuState& state, bool se
 std::optional<EditCommand> ReadEditShortcut(bool selectionKeys)
 {
     const bool ctrl = IsCtrlHeld();
+    const bool shift = IsShiftHeld();
     for (const EditCommandInfo& info : kEditCommands) {
-        if ((selectionKeys || IsUndoOrRedo(info.Command)) && Input::GetKeyDown(info.ShortcutKey) && info.Ctrl == ctrl)
+        if ((selectionKeys || !info.OnSelection) && Input::GetKeyDown(info.ShortcutKey) && info.Ctrl == ctrl &&
+            info.Shift == shift)
             return info.Command;
     }
     return std::nullopt;

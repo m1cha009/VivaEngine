@@ -1,5 +1,5 @@
-// VivaEditor: create, open and manage projects made with the engine (M14), and later edit their
-// scenes (M15 to M18). Like the Sandbox, it's a program built on the engine library; it includes
+// VivaEditor: create, open and manage projects made with the engine (M14), edit their scenes (M15
+// to M17), play and build them (M18). Like the Sandbox, it's a program built on the engine library; it includes
 // only engine headers (Viva/...), GLM and ImGui, never SDL or Vulkan.
 
 #include "EditorApp.h"
@@ -13,6 +13,7 @@ int main(int argc, char* argv[])
     // (--display <n>, --no-vsync, --quit-after <sec>; see Viva/Application.h). The editor's own:
     //   --open <folder>      open that project right away
     //   --settings <folder>  keep the project list there instead of in the user's settings folder
+    //   --build <folder>     with --open: build the project into that folder, then quit (M18)
     Viva::ApplicationSettings settings { .Title = "VivaEditor", .Width = 1280, .Height = 760 };
     settings.ReadCommandLine(argc, argv);
     EditorOptions options;
@@ -22,6 +23,8 @@ int main(int argc, char* argv[])
             options.OpenFolder = argv[++i];
         else if (arg == "--settings" && i + 1 < argc)
             options.SettingsFolder = argv[++i];
+        else if (arg == "--build" && i + 1 < argc)
+            options.BuildFolder = argv[++i];
     }
 
     EditorApp app(std::move(settings), std::move(options));

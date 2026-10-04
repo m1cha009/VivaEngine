@@ -19,12 +19,15 @@ scene saved to a file ([M13](docs/milestones/M13.md)); `assets/scenes/` has two 
 ## VivaEditor
 
 The editor ([M14](docs/milestones/M14.md), [M15](docs/milestones/M15.md),
-[M16](docs/milestones/M16.md), [M17](docs/milestones/M17.md)) is a second program next to the Sandbox. It opens on the Project
-Manager, where you create, open and delete projects, like Unity Hub. A project opens in a
-Unity-like editor: Scene, Hierarchy, Inspector, Project and Console windows in a docking layout,
-where you create primitives, cameras and models, select them by clicking, drag them with
-Move/Rotate/Scale gizmos, edit, duplicate, reparent and delete them, undo and redo any of it, and
-save the scene. Play mode and builds come next ([`docs/EditorRoadmap.md`](docs/EditorRoadmap.md)).
+[M16](docs/milestones/M16.md), [M17](docs/milestones/M17.md), [M18](docs/milestones/M18.md)) is a
+second program next to the Sandbox. It opens on the Project Manager, where you create, open and
+delete projects, like Unity Hub. A project opens in a Unity-like editor: Scene, Game, Hierarchy,
+Inspector, Project and Console windows in a docking layout, where you create primitives, cameras
+and models, select them by clicking, drag them with Move/Rotate/Scale gizmos, edit, duplicate,
+reparent and delete them, undo and redo any of it, and save the scene. Play runs the scene in the
+Game view and Stop puts it back; File > Build makes a folder that runs the game on its own, through
+the third program, **VivaPlayer**. What could come next is in
+[`docs/EditorRoadmap.md`](docs/EditorRoadmap.md) ("Later").
 
 ## Prerequisites
 
@@ -98,6 +101,7 @@ cmake --build --preset windows-debug
 | `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code), `Renderer/` (the only place for Vulkan) and `Scene/` (GameObjects, components, transforms, model loading). |
 | `sandbox/` | The `Sandbox` executable: the Lane Runner game, and with `--demo` the engine's demo scene. It uses the engine the way any game would |
 | `editor/` | The `VivaEditor` executable: the Project Manager, and (from M15) the scene editor |
+| `player/` | The `VivaPlayer` executable (M18): runs a project's startup scene; builds are made of it |
 | `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation, asset copying |
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
 | `assets/` | Game assets: textures (from `scripts/make-textures.ps1`) and glTF models (credits in `assets/models/CREDITS.md`) |

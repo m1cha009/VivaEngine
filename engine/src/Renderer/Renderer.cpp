@@ -61,13 +61,13 @@ struct DrawCommand {
 // background, as a linear color. The docked windows cover nearly all of it.
 constexpr glm::vec3 kUiBackground(0.01f);
 
-// A scene target (see Renderer::SetSceneTargetSize): the image the scene is drawn into, its depth
-// buffer, and the descriptor set through which ImGui shows the image. A GpuResource, so a target
-// that's replaced (the Scene view changed size) goes through the release lists like any other,
-// and is destroyed once the frames in flight are done with it, with no wait for the GPU.
-class SceneTarget : public GpuResource {
+// A render target's images (see Renderer::DrawScene): the color image the scene is drawn into,
+// its depth buffer, and the descriptor set through which ImGui shows the color image. A
+// GpuResource, so when a target changes size, the old images go through the release lists like
+// any other resource, and are destroyed once the frames in flight are done with them.
+class TargetImages : public GpuResource {
 public:
-    SceneTarget(ImGuiRenderer& imgui, VkExtent2D extent, std::unique_ptr<Image> color, std::unique_ptr<Image> depth)
+    TargetImages(ImGuiRenderer& imgui, VkExtent2D extent, std::unique_ptr<Image> color, std::unique_ptr<Image> depth)
         : Extent(extent)
         , Color(std::move(color))
         , Depth(std::move(depth))
@@ -75,18 +75,25 @@ public:
         , m_ImGui(imgui)
     {
     }
-    ~SceneTarget() override { m_ImGui.RemoveTexture(Texture); }
+    ~TargetImages() override { m_ImGui.RemoveTexture(Texture); }
 
     const VkExtent2D Extent;
     const std::unique_ptr<Image> Color;
     const std::unique_ptr<Image> Depth;
-    const VkDescriptorSet Texture; // the image's ImTextureID
+    const VkDescriptorSet Texture; // the color image's ImTextureID
 
 private:
     ImGuiRenderer& m_ImGui;
 };
 
 } // namespace
+
+// A render target as the game holds it (see Renderer::CreateRenderTarget): its images, made by
+// DrawScene at the size it asks for, and replaced when that size changes.
+class RenderTarget : public GpuResource {
+public:
+    std::unique_ptr<TargetImages> Images;
+};
 
 // The renderer's state and logic, hidden from the public header (see Renderer.h). Renderer's
 // public functions just forward here.
@@ -111,27 +118,30 @@ public:
     bool IsVSync() const { return m_VSync; }
     void SetCamera(const glm::mat4& view, const glm::mat4& projection);
     void SetClearColor(const glm::vec3& color) { m_ClearColor = color; }
-    void DrawGrid() { m_DrawGrid = true; }
     float GetAspectRatio() const;
-    void SetSceneTargetSize(uint32_t width, uint32_t height)
-    {
-        m_SceneTargetRequested = { width, height };
-        m_SceneTargetShown = true;
-    }
-    uint64_t GetSceneTexture() const { return m_SceneTarget ? reinterpret_cast<uint64_t>(m_SceneTarget->Texture) : 0; }
+    std::shared_ptr<RenderTarget> CreateRenderTarget() { return Track(std::make_unique<RenderTarget>()); }
+    void DrawScene(const std::shared_ptr<RenderTarget>& target, uint32_t width, uint32_t height, const RenderView& view);
+    void SetSceneInWindow(bool shown) { m_SceneInWindow = shown; }
     bool BeginFrame();
     void EndFrame();
 
 private:
     std::shared_ptr<Shader> LoadShader(const std::string& name);
     bool RecreateSwapchain();
-    void RecreateSceneTarget();
     std::unique_ptr<Image> CreateDepthImage(VkExtent2D extent) const;
+    // What a rendering shows of the scene: which camera (its slot in FrameUniforms), and whether
+    // with the grid.
+    struct SceneDraw {
+        uint32_t View = 0;
+        bool Grid = false;
+    };
     // Records one rendering: into `color` (whose layout must be COLOR_ATTACHMENT_OPTIMAL) and
-    // `depth`, cleared to `clearColor`, with the scene's draws and/or the UI.
+    // `depth`, cleared to `clearColor`, with the scene's draws (if `scene` isn't null) and/or the UI.
     void RecordRendering(VkCommandBuffer cmd, VkImageView color, const Image& depth, VkExtent2D extent,
-                         const glm::vec3& clearColor, bool drawScene, bool drawUi);
-    void RecordDraws(VkCommandBuffer cmd);
+                         const glm::vec3& clearColor, const SceneDraw* scene, bool drawUi);
+    void RecordTarget(VkCommandBuffer cmd, const TargetImages& images, const glm::vec3& clearColor, const SceneDraw& scene);
+    void SortDraws();
+    void RecordDraws(VkCommandBuffer cmd, uint32_t view);
     void RecordGrid(VkCommandBuffer cmd);
     void UpdateMemoryStats();
     static void DestroyReleased(FrameData& frame);
@@ -174,22 +184,25 @@ private:
     std::unique_ptr<Image> m_DepthImage; // the swapchain images' size, so it's rebuilt with them
     std::unique_ptr<ImGuiRenderer> m_ImGui; // draws the debug UI over the scene
 
-    // The scene target (see SetSceneTargetSize). Declared after m_ImGui, so it's destroyed before
-    // it: its destructor hands its texture back to ImGui.
-    VkExtent2D m_SceneTargetRequested {};     // the size asked for, applied in BeginFrame
-    std::unique_ptr<SceneTarget> m_SceneTarget; // null: the scene goes into the window
-    bool m_SceneTargetShown = false;          // SetSceneTargetSize was called this frame
+    // This frame's DrawScene calls: each render target, and the view to draw it from. Declared
+    // after m_ImGui, so it's destroyed before it: a target's images hand their texture back to
+    // ImGui when they go.
+    struct TargetDraw {
+        std::shared_ptr<RenderTarget> Target;
+        RenderView View;
+    };
+    std::vector<TargetDraw> m_TargetDraws;
+    bool m_SceneInWindow = true; // see SetSceneInWindow
 
     // The engine's defaults: the shader every material uses, and the texture for materials
     // created without one.
     std::shared_ptr<Shader> m_DefaultShader; // Unlit
-    std::shared_ptr<Shader> m_GridShader;    // for DrawGrid
+    std::shared_ptr<Shader> m_GridShader;    // for RenderView::Grid
     std::shared_ptr<Texture> m_WhiteTexture; // 1x1 white: "no texture"
 
     std::vector<DrawCommand> m_DrawList; // this frame's Submits
     CameraUniforms m_Camera {};          // from SetCamera
     glm::vec3 m_ClearColor { 0.0f };     // from SetClearColor
-    bool m_DrawGrid = false;             // DrawGrid was called this frame
     RenderStats m_Stats;                 // about the last frame drawn
     int m_LiveResources = 0;             // handed to the game and not released yet
     bool m_DestroyNow = false;           // shutting down: release means destroy
@@ -225,15 +238,16 @@ bool Renderer::IsVSync() const { return m_Impl->IsVSync(); }
 void Renderer::SetCamera(const glm::mat4& view, const glm::mat4& projection) { m_Impl->SetCamera(view, projection); }
 void Renderer::SetClearColor(const glm::vec3& color) { m_Impl->SetClearColor(color); }
 float Renderer::GetAspectRatio() const { return m_Impl->GetAspectRatio(); }
-void Renderer::SetSceneTargetSize(uint32_t width, uint32_t height) { m_Impl->SetSceneTargetSize(width, height); }
-uint64_t Renderer::GetSceneTexture() const { return m_Impl->GetSceneTexture(); }
+std::shared_ptr<RenderTarget> Renderer::CreateRenderTarget() { return m_Impl->CreateRenderTarget(); }
+void Renderer::DrawScene(const std::shared_ptr<RenderTarget>& target, uint32_t width, uint32_t height, const RenderView& view) { m_Impl->DrawScene(target, width, height, view); }
+void Renderer::SetSceneInWindow(bool shown) { m_Impl->SetSceneInWindow(shown); }
+uint64_t Renderer::GetTexture(const RenderTarget& target) { return target.Images ? reinterpret_cast<uint64_t>(target.Images->Texture) : 0; }
 bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
 void Renderer::EndFrame() { m_Impl->EndFrame(); }
 const std::string& Renderer::GetAssetName(const Mesh& mesh) { return mesh.GetAssetName(); }
 const std::string& Renderer::GetAssetName(const Texture& texture) { return texture.GetAssetName(); }
 const MaterialSettings& Renderer::GetSettings(const Material& material) { return material.GetSettings(); }
 const Bounds& Renderer::GetBounds(const Mesh& mesh) { return mesh.GetBounds(); }
-void Renderer::DrawGrid() { m_Impl->DrawGrid(); }
 
 void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                       const glm::mat4& transform)
@@ -410,10 +424,9 @@ void Renderer::Impl::SetCamera(const glm::mat4& view, const glm::mat4& projectio
 
 float Renderer::Impl::GetAspectRatio() const
 {
-    // The scene target's size if there is one, otherwise the swapchain's, which BeginFrame keeps
-    // in step with the window. Using it, rather than the window's, means the picture never
-    // stretches while the window is being resized.
-    const VkExtent2D extent = m_SceneTarget ? m_SceneTarget->Extent : m_Swapchain->GetExtent();
+    // The swapchain's size, which BeginFrame keeps in step with the window. Using it, rather than
+    // the window's, means the picture never stretches while the window is being resized.
+    const VkExtent2D extent = m_Swapchain->GetExtent();
     return static_cast<float>(extent.width) / static_cast<float>(extent.height);
 }
 
@@ -455,25 +468,35 @@ bool Renderer::Impl::RecreateSwapchain()
     return true;
 }
 
-void Renderer::Impl::RecreateSceneTarget()
+void Renderer::Impl::DrawScene(const std::shared_ptr<RenderTarget>& target, uint32_t width, uint32_t height,
+                               const RenderView& view)
 {
-    // The old target may still be in use by the frames in flight, so it's parked in the release
-    // list of the frame this BeginFrame starts (its fence was just waited on), like a resource the
-    // game lets go of (M8). By the time that list is emptied, the frames that used it are done.
-    if (m_SceneTarget)
-        m_Frames->GetFrame(m_FrameIndex).ReleasedResources.push_back(std::move(m_SceneTarget));
-    const VkExtent2D extent = m_SceneTargetRequested;
-    if (extent.width == 0 || extent.height == 0)
+    // Like Submit: only while a frame is being built. One camera slot is the window's; the others
+    // are for targets (see FrameUniforms).
+    constexpr size_t kMaxTargets = FrameUniforms::kMaxViews - 1;
+    VIVA_ASSERT(m_FrameOpen, "DrawScene only works while a frame is being built: call it from OnUpdate");
+    VIVA_ASSERT(m_TargetDraws.size() < kMaxTargets, "Too many DrawScene calls in one frame");
+    if (!m_FrameOpen || !target || width == 0 || height == 0 || m_TargetDraws.size() >= kMaxTargets)
         return;
 
-    // The same color format as the swapchain, so the same pipelines can draw into it, and SAMPLED
-    // too, so the UI can read it. A Unity RenderTexture is the same idea.
-    std::unique_ptr<Image> color = Image::Create(*m_Context, {
-        .Extent = extent,
-        .Format = m_Swapchain->GetFormat(),
-        .Usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-    });
-    m_SceneTarget = std::make_unique<SceneTarget>(*m_ImGui, extent, std::move(color), CreateDepthImage(extent));
+    // A new size needs new images. The old ones may still be read by the frames in flight (the UI
+    // showed them), so they're parked in the newest frame's release list, like a resource the game
+    // lets go of (M8): by the time that list is emptied, the frames that used them are done.
+    const std::unique_ptr<TargetImages>& current = target->Images;
+    if (!current || current->Extent.width != width || current->Extent.height != height) {
+        if (current)
+            m_Frames->GetFrame(m_ReleaseSlot).ReleasedResources.push_back(std::move(target->Images));
+        const VkExtent2D extent { width, height };
+        // The same color format as the swapchain, so the same pipelines can draw into it, and
+        // SAMPLED too, so the UI can read it. A Unity RenderTexture is the same idea.
+        std::unique_ptr<Image> color = Image::Create(*m_Context, {
+            .Extent = extent,
+            .Format = m_Swapchain->GetFormat(),
+            .Usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        });
+        target->Images = std::make_unique<TargetImages>(*m_ImGui, extent, std::move(color), CreateDepthImage(extent));
+    }
+    m_TargetDraws.push_back({ target, view });
 }
 
 std::unique_ptr<Image> Renderer::Impl::CreateDepthImage(VkExtent2D extent) const
@@ -517,11 +540,6 @@ bool Renderer::Impl::BeginFrame()
     VK_CHECK(vkWaitForFences(device, 1, &frame.InFlight, VK_TRUE, UINT64_MAX));
     DestroyReleased(frame);
 
-    // A Scene view that changed size gets a new target (see RecreateSceneTarget).
-    const VkExtent2D current = m_SceneTarget ? m_SceneTarget->Extent : VkExtent2D {};
-    if (m_SceneTargetRequested.width != current.width || m_SceneTargetRequested.height != current.height)
-        RecreateSceneTarget();
-
     // 2. Ask the swapchain which image to draw into next. The call returns as soon as it knows the
     //    index; the semaphore is signaled once the image is really free (the display may still be
     //    showing it).
@@ -553,13 +571,22 @@ void Renderer::Impl::EndFrame()
     VkDevice device = m_Context->GetDevice();
     FrameData& frame = m_Frames->GetFrame(m_FrameIndex);
 
-    // 3. Fill this frame's uniform buffer with the camera (BeginFrame's fence wait made it free).
-    //    The projection follows OpenGL's convention, where clip space y points up; Vulkan's points
+    // 3. Fill this frame's uniform buffer with the cameras (BeginFrame's fence wait made it free):
+    //    slot 0 is the window's (SetCamera), and each DrawScene target gets the next. The
+    //    projection follows OpenGL's convention, where clip space y points up; Vulkan's points
     //    down, so flipping the y scale keeps +Y up on screen. (Unity does the same in
     //    GL.GetGPUProjectionMatrix.)
-    CameraUniforms camera = m_Camera;
-    camera.Projection[1][1] *= -1.0f;
-    m_Uniforms->Write(m_FrameIndex, camera);
+    const auto writeCamera = [this](uint32_t view, const glm::mat4& viewMatrix, const glm::mat4& projection) {
+        CameraUniforms camera { .View = viewMatrix, .Projection = projection };
+        camera.Projection[1][1] *= -1.0f;
+        m_Uniforms->Write(m_FrameIndex, view, camera);
+    };
+    writeCamera(0, m_Camera.View, m_Camera.Projection);
+    for (size_t i = 0; i < m_TargetDraws.size(); ++i)
+        writeCamera(static_cast<uint32_t>(i + 1), m_TargetDraws[i].View.View, m_TargetDraws[i].View.Projection);
+    SortDraws();
+    m_Stats.DrawCalls = 0;
+    m_Stats.Triangles = 0;
 
     // 4. Record this frame's commands: make the images drawable, clear them and draw, make the
     //    color image presentable.
@@ -571,37 +598,15 @@ void Renderer::Impl::EndFrame()
     };
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
-    // With a scene target (the editor's Scene view), the scene is drawn into it first, and the
-    // window's image gets only the UI, which shows the target. Without one, the scene and the UI
-    // share the window's image, the UI drawn over the scene.
-    // A target that wasn't asked for this frame (its Scene window is hidden behind another tab) is
-    // kept, but nothing is drawn into it: nobody would see it.
-    if (m_SceneTarget && m_SceneTargetShown) {
-        // The old contents don't matter (we're about to clear). The last frame's UI read the image
-        // in its fragment shader, which must be done before this frame draws into it; that's an
-        // execution dependency only, since reading leaves nothing to make visible.
-        TransitionImage(cmd, {
-            .Image = m_SceneTarget->Color->GetHandle(),
-            .OldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .NewLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .SrcStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            .SrcAccess = VK_ACCESS_2_NONE,
-            .DstStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .DstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        });
-        RecordRendering(cmd, m_SceneTarget->Color->GetView(), *m_SceneTarget->Depth, m_SceneTarget->Extent, m_ClearColor,
-                        true, false);
-        // The scene's writes must be finished, and visible, before the UI's fragment shader samples
-        // the image, in the layout made for reading.
-        TransitionImage(cmd, {
-            .Image = m_SceneTarget->Color->GetHandle(),
-            .OldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .NewLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .SrcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .SrcAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .DstStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            .DstAccess = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-        });
+    // First the render targets (the editor's Scene and Game views), each from its own camera.
+    // Then the window: the scene from SetCamera's camera (unless SetSceneInWindow(false), as in
+    // the editor, whose window shows only its UI), and the UI over it, which may show the
+    // targets' images. A target nobody drew into this frame (its window is hidden behind another
+    // tab) keeps its last picture.
+    for (size_t i = 0; i < m_TargetDraws.size(); ++i) {
+        const TargetDraw& draw = m_TargetDraws[i];
+        RecordTarget(cmd, *draw.Target->Images, draw.View.ClearColor,
+                     { .View = static_cast<uint32_t>(i + 1), .Grid = draw.View.Grid });
     }
 
     const VkImage image = m_Swapchain->GetImage(m_ImageIndex);
@@ -618,9 +623,9 @@ void Renderer::Impl::EndFrame()
         .DstStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         .DstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
     });
-    const bool sceneInWindow = m_SceneTarget == nullptr;
+    const SceneDraw windowScene { .View = 0, .Grid = false };
     RecordRendering(cmd, m_Swapchain->GetImageView(m_ImageIndex), *m_DepthImage, m_Swapchain->GetExtent(),
-                    sceneInWindow ? m_ClearColor : kUiBackground, sceneInWindow, true);
+                    m_SceneInWindow ? m_ClearColor : kUiBackground, m_SceneInWindow ? &windowScene : nullptr, true);
 
     // Hand the image to presentation once the drawing's writes are done. Nothing after it in this
     // frame uses the image, so the destination stage is NONE: the semaphore covers the rest.
@@ -685,14 +690,42 @@ void Renderer::Impl::EndFrame()
 
     // The submits were used up by this frame; the next frame builds its own list.
     m_DrawList.clear();
-    m_DrawGrid = false;
-    m_SceneTargetShown = false;
+    m_TargetDraws.clear();
     m_FrameOpen = false;
     m_FrameIndex = (m_FrameIndex + 1) % FrameResources::kFramesInFlight;
 }
 
+void Renderer::Impl::RecordTarget(VkCommandBuffer cmd, const TargetImages& images, const glm::vec3& clearColor,
+                                  const SceneDraw& scene)
+{
+    // The old contents don't matter (we're about to clear). The last frame's UI read the image in
+    // its fragment shader, which must be done before this frame draws into it; that's an
+    // execution dependency only, since reading leaves nothing to make visible.
+    TransitionImage(cmd, {
+        .Image = images.Color->GetHandle(),
+        .OldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .NewLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .SrcStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        .SrcAccess = VK_ACCESS_2_NONE,
+        .DstStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .DstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+    });
+    RecordRendering(cmd, images.Color->GetView(), *images.Depth, images.Extent, clearColor, &scene, false);
+    // The scene's writes must be finished, and visible, before the UI's fragment shader samples the
+    // image, in the layout made for reading.
+    TransitionImage(cmd, {
+        .Image = images.Color->GetHandle(),
+        .OldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .NewLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .SrcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .SrcAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .DstStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        .DstAccess = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+    });
+}
+
 void Renderer::Impl::RecordRendering(VkCommandBuffer cmd, VkImageView color, const Image& depth, VkExtent2D extent,
-                                     const glm::vec3& clearColor, bool drawScene, bool drawUi)
+                                     const glm::vec3& clearColor, const SceneDraw* scene, bool drawUi)
 {
     // The depth buffer's old contents don't matter. Both frames in flight share it, so the
     // previous frame's depth tests (which read and write it in the fragment-test stages) must be
@@ -752,11 +785,11 @@ void Renderer::Impl::RecordRendering(VkCommandBuffer cmd, VkImageView color, con
     const VkRect2D scissor { .extent = extent };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    if (drawScene) {
-        RecordDraws(cmd);
+    if (scene) {
+        RecordDraws(cmd, scene->View);
         // After everything solid: it's see-through, so it blends over what's already drawn, and the
         // depth test hides it behind objects.
-        if (m_DrawGrid)
+        if (scene->Grid)
             RecordGrid(cmd);
     }
     // The debug UI goes last, so it's drawn over the scene. ImGui's pipeline doesn't test depth,
@@ -787,7 +820,7 @@ void Renderer::Impl::UpdateMemoryStats()
     }
 }
 
-void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
+void Renderer::Impl::SortDraws()
 {
     // Sort the draws so that those sharing a shader, then a material, then a mesh come together:
     // every switch costs a bind, so grouping saves binds. The order doesn't change the picture,
@@ -801,14 +834,17 @@ void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
             return less(a.Material, b.Material);
         return less(a.Mesh, b.Mesh);
     });
+}
 
-    // Set 0, this frame's camera, is bound once for every draw. All pipelines share
-    // m_PipelineLayout, so it stays bound when the pipeline changes.
+void Renderer::Impl::RecordDraws(VkCommandBuffer cmd, uint32_t view)
+{
+    // Set 0, this frame's cameras, is bound once for every draw, with the offset of this view's
+    // camera (see FrameUniforms). All pipelines share m_PipelineLayout, so it stays bound when the
+    // pipeline changes.
     const VkDescriptorSet cameraSet = m_Uniforms->GetSet(m_FrameIndex);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &cameraSet, 0, nullptr);
-
-    m_Stats.DrawCalls = static_cast<uint32_t>(m_DrawList.size());
-    m_Stats.Triangles = 0;
+    const uint32_t cameraOffset = m_Uniforms->GetOffset(view);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &cameraSet, 1, &cameraOffset);
+    m_Stats.DrawCalls += static_cast<uint32_t>(m_DrawList.size());
 
     const Shader* boundShader = nullptr;
     const Material* boundMaterial = nullptr;

@@ -78,8 +78,8 @@ VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, std::span<const
     return layout;
 }
 
-void WriteUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
-                                  VkDeviceSize range)
+void WriteDynamicUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
+                                         VkDeviceSize range)
 {
     const VkDescriptorBufferInfo bufferInfo { .buffer = buffer, .offset = 0, .range = range };
     const VkWriteDescriptorSet write {
@@ -87,7 +87,7 @@ void WriteUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t
         .dstSet = set,
         .dstBinding = binding,
         .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
         .pBufferInfo = &bufferInfo,
     };
     vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);

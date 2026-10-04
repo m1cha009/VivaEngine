@@ -398,6 +398,7 @@ bool VulkanContext::PickPhysicalDevice()
     m_PresentQueueFamily = best->PresentQueueFamily;
     // Anisotropic filtering, if the GPU has it, at the strongest level it supports (usually 16).
     m_MaxSamplerAnisotropy = best->SamplerAnisotropy ? best->Properties.limits.maxSamplerAnisotropy : 0.0f;
+    m_UniformBufferAlignment = static_cast<uint32_t>(best->Properties.limits.minUniformBufferOffsetAlignment);
 
     // The driver's name and version come from the Vulkan 1.2 properties, another pNext chain.
     VkPhysicalDeviceVulkan12Properties properties12 { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES };

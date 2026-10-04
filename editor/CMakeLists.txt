@@ -2,10 +2,12 @@
 # Sandbox. It starts in the Project Manager, which creates and opens projects (M14), and edits
 # their scenes in docked windows (M15 onwards).
 add_executable(VivaEditor
+    src/Builder.cpp
     src/ConsoleWindow.cpp
     src/EditorApp.cpp
     src/EditorCamera.cpp
     src/EditorMenus.cpp
+    src/GameView.cpp
     src/Gizmo.cpp
     src/HierarchyWindow.cpp
     src/InspectorWindow.cpp

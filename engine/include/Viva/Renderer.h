@@ -23,6 +23,7 @@ class Window;
 class Mesh;
 class Texture;
 class Material;
+class RenderTarget;
 
 // What a material is made of. Fill it with designated initializers:
 //     renderer.CreateMaterial({ .Texture = crate, .Color = { 1.0f, 0.5f, 0.5f, 1.0f } });
@@ -43,9 +44,20 @@ struct MaterialSettings {
     bool operator==(const MaterialSettings&) const = default;
 };
 
+// Where a picture of the scene is drawn from (see Renderer::DrawScene): a camera's view and
+// projection matrices (see Viva/Camera.h) and background color, plus, for the editor's Scene view,
+// the ground grid: lines one unit apart on the plane y = 0, every tenth one stronger, the X axis red
+// and the Z axis blue, fading out with distance.
+struct RenderView {
+    glm::mat4 View { 1.0f };
+    glm::mat4 Projection { 1.0f };
+    glm::vec3 ClearColor { 0.0f };
+    bool Grid = false;
+};
+
 // Numbers about the last frame the renderer drew, for a stats display (see Renderer::GetStats).
 struct RenderStats {
-    // The scene: one draw call per Submit, and the triangles they drew.
+    // The scene: one draw call per Submit and picture it's drawn into, and the triangles they drew.
     uint32_t DrawCalls = 0;
     uint32_t Triangles = 0;
     // The debug UI's draw calls (Dear ImGui batches many widgets into each one).
@@ -105,29 +117,32 @@ public:
     void Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                 const glm::mat4& transform);
 
-    // Where the frame is seen from: a view matrix and a projection matrix (see Viva/Camera.h).
-    // The scene sets them every frame from its main camera. They stay until set again.
+    // Where the window's picture is seen from: a view matrix and a projection matrix (see
+    // Viva/Camera.h). The scene sets them every frame from its main camera. They stay until set
+    // again.
     void SetCamera(const glm::mat4& view, const glm::mat4& projection);
-    // The color each frame starts from, which shows wherever nothing is drawn: a linear color.
-    // The scene sets it every frame from its main camera's BackgroundColor. Black until then.
+    // The color each frame starts from in the window, which shows wherever nothing is drawn: a
+    // linear color. The scene sets it every frame from its main camera's BackgroundColor. Black
+    // until then.
     void SetClearColor(const glm::vec3& color);
-    // Draws the editor's ground grid this frame, like Unity's Scene view grid: lines one unit
-    // apart on the plane y = 0, every tenth one stronger, the X axis red and the Z axis blue,
-    // fading out with distance. It lasts one frame, like Submit, so call it every frame.
-    void DrawGrid();
-    // The width of the image the scene is drawn into divided by its height: a camera's projection
-    // needs it.
+    // The window's width divided by its height: a camera's projection needs it.
     float GetAspectRatio() const;
+    // Whether the window shows the scene (behind the UI). On by default, as games want; the editor
+    // turns it off: its window shows only the UI, which shows the scene in its Scene and Game views.
+    void SetSceneInWindow(bool shown);
 
-    // The editor's Scene view (M15): draws the scene into an image of its own, width x height
-    // pixels, instead of into the window. The window then shows only the UI, and the UI shows the
-    // scene with ImGui::Image(GetSceneTexture(), size), as a "render texture". Call it every frame
-    // the image is shown: in a frame without the call, the image is kept but not drawn into. 0 x 0,
-    // the default, draws the scene into the window, as games do. A new size takes effect at the
-    // next BeginFrame.
-    void SetSceneTargetSize(uint32_t width, uint32_t height);
-    // The scene's image as an ImTextureID, for ImGui::Image, or 0 while there's none.
-    uint64_t GetSceneTexture() const;
+    // Render targets (M18): pictures of the scene drawn into images of their own, from their own
+    // cameras, which the UI shows with ImGui::Image(GetTexture(target), size). That's Unity's
+    // RenderTexture with a Camera drawing into it. The editor's Scene view and Game view are each
+    // one: the same scene, seen through two cameras in the same frame.
+    std::shared_ptr<RenderTarget> CreateRenderTarget();
+    // Draws this frame's scene into `target` as well, width x height pixels, seen from `view`.
+    // Like Submit, it lasts one frame: call it every frame the picture is shown (a target not drawn
+    // into keeps its last picture). A new size makes new images right away. Up to three targets
+    // per frame.
+    void DrawScene(const std::shared_ptr<RenderTarget>& target, uint32_t width, uint32_t height, const RenderView& view);
+    // The target's image as an ImTextureID, for ImGui::Image, or 0 before its first DrawScene.
+    static uint64_t GetTexture(const RenderTarget& target);
 
     // Numbers about the last frame drawn: draw calls, triangles and GPU memory.
     const RenderStats& GetStats() const;

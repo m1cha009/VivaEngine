@@ -1,5 +1,6 @@
 #include "EditorApp.h"
 
+#include "Builder.h"
 #include "EditorUi.h"
 #include "HierarchyWindow.h"
 #include "InspectorWindow.h"
@@ -40,7 +41,8 @@ void BuildDefaultLayout(ImGuiID dockspace)
     ImGui::DockBuilderDockWindow("Inspector", right);
     ImGui::DockBuilderDockWindow("Project", bottom);
     ImGui::DockBuilderDockWindow("Console", bottom);
-    ImGui::DockBuilderDockWindow("Scene", center);
+    ImGui::DockBuilderDockWindow("Game", center);
+    ImGui::DockBuilderDockWindow("Scene", center); // docked last, so its tab is the one in front
     ImGui::DockBuilderFinish(dockspace);
 }
 
@@ -78,11 +80,20 @@ void EditorApp::OnStart()
     }
 
     // Edit mode: the scene is shown, but its components don't run, as in Unity before Play (M18).
+    // The window shows only the UI: the scene appears in the Scene and Game views.
     SetSceneUpdating(false);
+    GetRenderer().SetSceneInWindow(false);
     m_Editor = std::make_unique<SceneEditor>(*this);
 
     if (!m_Options.OpenFolder.empty())
         OpenProject(NormalizePath(m_Options.OpenFolder));
+
+    // A build from the command line: build, then quit with the result.
+    if (!m_Options.BuildFolder.empty()) {
+        if (!m_Project)
+            Log::Error("--build needs a project to build: --open <folder> (see above if it was given)");
+        Quit(m_Project && BuildProject(*m_Project, m_Options.BuildFolder) ? 0 : 1);
+    }
 }
 
 void EditorApp::OnShutdown()
@@ -99,13 +110,6 @@ void EditorApp::OnUpdate(float dt)
     else if (const std::optional<std::string> folder = m_ProjectManager->Draw())
         OpenProject(*folder);
     UpdateTitle();
-}
-
-void EditorApp::OnRender()
-{
-    // The scene has set its main camera; the Scene view shows it from the editor's instead.
-    if (m_Project)
-        m_SceneView.Render(GetRenderer(), GetScene());
 }
 
 bool EditorApp::OnQuitRequested()
@@ -142,10 +146,8 @@ void EditorApp::CloseProject()
         return;
     Log::Info("Project closed: {}", m_Project->GetName());
     GetScene().Clear();
-    // Back to the editor's own (empty) assets folder, so the project's models can go, and back to
-    // drawing into the window: the Project Manager has no Scene view.
+    // Back to the editor's own (empty) assets folder, so the project's models can go.
     SetAssetsFolder(GetExecutableDirectory() + "assets/");
-    GetRenderer().SetSceneTargetSize(0, 0);
     m_ProjectWindow.SetProject(nullptr);
     m_Project.reset();
     SceneReplaced({});
@@ -231,6 +233,10 @@ void EditorApp::SaveSceneAs(std::function<void()> then)
 
 void EditorApp::AskToSaveThen(std::function<void()> action)
 {
+    // Everything that leaves the scene (New, Open, Close Project, Build, Quit) comes through here:
+    // Play mode ends first, throwing away what changed while playing, as Stop does.
+    if (m_Editor->IsPlaying())
+        Stop();
     if (!m_Editor->IsDirty()) {
         action();
         return;
@@ -257,6 +263,8 @@ void EditorApp::DrawEditor(float dt)
     m_SceneView.Update(dt);
     if (m_Show.Scene)
         m_SceneView.Draw(GetRenderer(), *m_Editor, &m_Show.Scene);
+    if (m_Show.Game)
+        m_GameView.Draw(GetRenderer(), GetScene(), &m_Show.Game);
     if (m_Show.Hierarchy) {
         if (const std::optional<EditCommand> clicked = m_Hierarchy.Draw(*m_Editor, m_SceneView.GetPlacement(), &m_Show.Hierarchy))
             command = clicked;
@@ -294,17 +302,28 @@ void EditorApp::DrawEditor(float dt)
 std::optional<EditCommand> EditorApp::DrawMenuBar()
 {
     std::optional<EditCommand> command; // the Edit menu's item clicked, run after the windows
+    // Saving would save what Play mode changed, which Unity doesn't allow either: Save waits for
+    // Stop. (New, Open, Close Project and Build stop Play mode first: see AskToSaveThen.)
+    const bool editing = !m_Editor->IsPlaying();
+
     // Keyboard shortcuts work anywhere in the editor (RouteGlobal), menu open or not.
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
         NewScene();
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal))
         ShowOpenSceneDialog();
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+    if (editing && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         SaveScene();
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+    if (editing && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         SaveSceneAs();
 
-    if (!ImGui::BeginMainMenuBar())
+    // In Play mode the menu bar turns a darker blue, so it's hard to miss that changes won't last
+    // (Unity tints the whole editor).
+    if (!editing)
+        ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4(0.1f, 0.25f, 0.5f, 1.0f));
+    const bool menuBar = ImGui::BeginMainMenuBar();
+    if (!editing)
+        ImGui::PopStyleColor();
+    if (!menuBar)
         return command;
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("New Scene", "Ctrl+N"))
@@ -312,10 +331,14 @@ std::optional<EditCommand> EditorApp::DrawMenuBar()
         if (ImGui::MenuItem("Open Scene...", "Ctrl+O"))
             ShowOpenSceneDialog();
         ImGui::Separator();
-        if (ImGui::MenuItem("Save", "Ctrl+S"))
+        // The last argument of MenuItem greys the item out while it's false.
+        if (ImGui::MenuItem("Save", "Ctrl+S", false, editing))
             SaveScene();
-        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S", false, editing))
             SaveSceneAs();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Build..."))
+            ShowBuildDialog();
         ImGui::Separator();
         if (ImGui::MenuItem("Close Project"))
             AskToSaveThen([this] { CloseProject(); });
@@ -328,6 +351,8 @@ std::optional<EditCommand> EditorApp::DrawMenuBar()
             .HasSelection = m_Editor->GetSelection() != nullptr,
             .CanUndo = m_Editor->CanUndo(),
             .CanRedo = m_Editor->CanRedo(),
+            .Playing = m_Editor->IsPlaying(),
+            .Paused = m_Editor->IsPaused(),
         };
         command = DrawEditMenuItems(state, false);
         ImGui::EndMenu();
@@ -341,6 +366,7 @@ std::optional<EditCommand> EditorApp::DrawMenuBar()
     if (ImGui::BeginMenu("Window")) {
         // A menu item with a bool* shows a check mark and flips the bool when clicked.
         ImGui::MenuItem("Scene", nullptr, &m_Show.Scene);
+        ImGui::MenuItem("Game", nullptr, &m_Show.Game);
         ImGui::MenuItem("Hierarchy", nullptr, &m_Show.Hierarchy);
         ImGui::MenuItem("Inspector", nullptr, &m_Show.Inspector);
         ImGui::MenuItem("Project", nullptr, &m_Show.Project);
@@ -352,8 +378,62 @@ std::optional<EditCommand> EditorApp::DrawMenuBar()
         }
         ImGui::EndMenu();
     }
+    if (const std::optional<EditCommand> clicked = DrawPlayButtons())
+        command = clicked;
     ImGui::EndMainMenuBar();
     return command;
+}
+
+std::optional<EditCommand> EditorApp::DrawPlayButtons()
+{
+    // Play and Pause in the middle of the menu bar, where Unity has them. While playing, Play
+    // becomes Stop, and the active one is drawn pressed.
+    const bool playing = m_Editor->IsPlaying();
+    const float width = ImGui::CalcTextSize("Stop").x + ImGui::CalcTextSize("Pause").x +
+                        ImGui::GetStyle().FramePadding.x * 4.0f + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), (ImGui::GetWindowWidth() - width) * 0.5f));
+    const auto button = [](const char* label, bool pressed) {
+        if (pressed)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        const bool clicked = ImGui::Button(label);
+        if (pressed)
+            ImGui::PopStyleColor();
+        return clicked;
+    };
+    std::optional<EditCommand> clicked;
+    if (button(playing ? "Stop" : "Play", playing))
+        clicked = EditCommand::Play;
+    ImGui::BeginDisabled(!playing); // greyed out, and not clickable, until Play
+    if (button("Pause", m_Editor->IsPaused()))
+        clicked = EditCommand::Pause;
+    ImGui::EndDisabled();
+    return clicked;
+}
+
+void EditorApp::Play()
+{
+    m_Editor->BeginPlay();
+    ImGui::SetWindowFocus("Game"); // as Unity does, show the game
+    Log::Info("Play mode: on (changes made now are undone by Stop)");
+}
+
+void EditorApp::Stop()
+{
+    m_Editor->EndPlay();
+    Log::Info("Play mode: off");
+}
+
+void EditorApp::ShowBuildDialog()
+{
+    // The build copies the scene files as they are on disk, so unsaved changes are saved (or not)
+    // first. The suggested folder is next to the project's.
+    AskToSaveThen([this] {
+        ShowFolderDialog("Build " + m_Project->GetName() + " into...", GetParentFolder(m_Project->GetFolder()),
+                         [this](const std::string& output) {
+                             if (m_Project) // it may have been closed while the dialog was open
+                                 BuildProject(*m_Project, output);
+                         });
+    });
 }
 
 void EditorApp::DrawSavePrompt()
@@ -392,7 +472,8 @@ void EditorApp::UpdateTitle()
     // "VivaEditor - MyGame - Main*", where * means unsaved changes, as in Unity's title bar.
     std::string title = kTitle;
     if (m_Project)
-        title += " - " + m_Project->GetName() + " - " + GetSceneName() + (m_Editor->IsDirty() ? "*" : "");
+        title += " - " + m_Project->GetName() + " - " + GetSceneName() + (m_Editor->IsDirty() ? "*" : "") +
+                 (!m_Editor->IsPlaying() ? "" : m_Editor->IsPaused() ? " [Paused]" : " [Playing]");
     if (title != m_Title) {
         SetWindowTitle(title);
         m_Title = std::move(title);
@@ -401,16 +482,30 @@ void EditorApp::UpdateTitle()
 
 void EditorApp::RunEditCommand(EditCommand command)
 {
-    GameObject* selection = m_Editor->GetSelection();
-    if (!selection && command != EditCommand::Undo && command != EditCommand::Redo)
-        return;
     switch (command) {
     case EditCommand::Undo:
         m_Editor->Undo();
-        break;
+        return;
     case EditCommand::Redo:
         m_Editor->Redo();
+        return;
+    case EditCommand::Play:
+        if (m_Editor->IsPlaying())
+            Stop();
+        else
+            Play();
+        return;
+    case EditCommand::Pause:
+        if (m_Editor->IsPlaying())
+            m_Editor->SetPaused(!m_Editor->IsPaused());
+        return;
+    default:
         break;
+    }
+    GameObject* selection = m_Editor->GetSelection();
+    if (!selection || !ActsOnSelection(command))
+        return;
+    switch (command) {
     case EditCommand::Duplicate:
         m_Editor->Duplicate(*selection);
         break;
@@ -424,6 +519,8 @@ void EditorApp::RunEditCommand(EditCommand command)
         break;
     case EditCommand::FrameSelected:
         m_SceneView.Frame(*selection);
+        break;
+    default:
         break;
     }
 }

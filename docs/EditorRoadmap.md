@@ -136,15 +136,20 @@ toolbar above the Scene view.
 
 ## M18: Play mode and builds
 
-- [ ] **Play / Pause / Stop** in the toolbar. Play snapshots the scene (with M13's
+- [x] **Play / Pause / Stop** in the toolbar. Play snapshots the scene (with M13's
       serialization) and runs its components. Stop restores the snapshot, like Unity, where
       changes made in Play mode are lost.
-- [ ] Play mode looks through the scene's Camera; the Scene view keeps the editor camera
-- [ ] A generic **`VivaPlayer`** executable that runs a project's startup scene
-- [ ] **File > Build**: copies the player, the shaders and the project's assets and scenes into
+- [x] Play mode looks through the scene's Camera; the Scene view keeps the editor camera
+- [x] A generic **`VivaPlayer`** executable that runs a project's startup scene
+- [x] **File > Build**: copies the player, the shaders and the project's assets and scenes into
       a folder you choose (Unity's Build Settings → Build)
-- [ ] *You should see:* press Play and watch the Spinners turn, press Stop and everything is back;
+- [x] *You should see:* press Play and watch the Spinners turn, press Stop and everything is back;
       the built folder runs without the editor
+
+Done on 2026-10-04 (see [`milestones/M18.md`](milestones/M18.md)). Play mode shows the game in a new
+Game view; the renderer draws the scene into any number of render targets from their own cameras
+(`Renderer::DrawScene`). Builds also work from the command line (`VivaEditor --open <project>
+--build <folder>`). Play mode restores the undo history's current snapshot. M13–M18 are complete.
 
 ## Later (after M18, decide together)
 

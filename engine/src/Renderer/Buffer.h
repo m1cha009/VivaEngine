@@ -50,8 +50,8 @@ public:
     VkBuffer GetHandle() const { return m_Buffer; }
     VkDeviceSize GetSize() const { return m_Size; }
 
-    // Copies `data` to the start of the buffer. Only for CpuToGpu buffers.
-    void Write(std::span<const std::byte> data);
+    // Copies `data` into the buffer, `offset` bytes from its start. Only for CpuToGpu buffers.
+    void Write(std::span<const std::byte> data, VkDeviceSize offset = 0);
 
 private:
     VmaAllocator m_Allocator = VK_NULL_HANDLE;

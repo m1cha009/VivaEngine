@@ -24,10 +24,11 @@ VkImageView CreateImageView(VkDevice device, VkImage image, VkFormat format, VkI
 // Descriptor set layouts and sets (see FrameUniforms.h for what they are; DescriptorAllocator
 // hands out the sets).
 VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice device, std::span<const VkDescriptorSetLayoutBinding> bindings);
-// Points one binding of `set` at a resource: a uniform buffer (its first `range` bytes), or an
-// image view with its sampler, which the image must be in `layout` for whenever it's sampled.
-void WriteUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
-                                  VkDeviceSize range);
+// Points one binding of `set` at a resource: a uniform buffer (`range` bytes of it, at the dynamic
+// offset given when the set is bound: see FrameUniforms), or an image view with its sampler, which
+// the image must be in `layout` for whenever it's sampled.
+void WriteDynamicUniformBufferDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkBuffer buffer,
+                                         VkDeviceSize range);
 void WriteImageDescriptor(VkDevice device, VkDescriptorSet set, uint32_t binding, VkImageView view, VkSampler sampler,
                           VkImageLayout layout);
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ConsoleWindow.h"
+#include "GameView.h"
 #include "HierarchyWindow.h"
 #include "ProjectManager.h"
 #include "ProjectWindow.h"
@@ -19,15 +20,19 @@
 struct EditorOptions {
     std::string SettingsFolder; // where the project list lives; the user's settings folder if empty
     std::string OpenFolder;     // a project to open right away, or empty for the Project Manager
+    // With OpenFolder: build the project into this folder, then quit (exit code 1 if the build
+    // failed). Unity's batch-mode builds, for scripts and tests.
+    std::string BuildFolder;
 };
 
 // VivaEditor: an Application like the Sandbox, whose content is projects. With no project open it
 // shows the Project Manager (Unity Hub, M14). With one open, it's the editor (M15): a menu bar, and
-// the Scene, Hierarchy, Inspector, Project and Console windows, docked into one layout.
+// the Scene, Game, Hierarchy, Inspector, Project and Console windows, docked into one layout.
 //
 // The scene being edited is the Application's own scene. The editor keeps it in Edit mode (its
-// components don't run) and draws it through its own camera, into the Scene window. Every change
-// to it goes through the SceneEditor (M16).
+// components don't run) until Play (M18), and draws it into the Scene window through its own
+// camera, and into the Game window through the scene's. Every change to it goes through the
+// SceneEditor (M16).
 class EditorApp : public Viva::Application {
 public:
     EditorApp(Viva::ApplicationSettings settings, EditorOptions options);
@@ -35,7 +40,6 @@ public:
 protected:
     void OnStart() override;
     void OnUpdate(float dt) override;
-    void OnRender() override;
     bool OnQuitRequested() override;
     void OnShutdown() override;
 
@@ -43,6 +47,7 @@ private:
     // Which of the editor's windows are open (the Window menu).
     struct WindowVisibility {
         bool Scene = true;
+        bool Game = true;
         bool Hierarchy = true;
         bool Inspector = true;
         bool Project = true;
@@ -70,8 +75,16 @@ private:
     void DrawEditor(float dt);
     // Returns the Edit menu's command clicked, if any, which runs after the windows have drawn.
     std::optional<EditCommand> DrawMenuBar();
-    // An Edit menu command: Undo, Redo, or one on the selection (nothing without one).
+    // An Edit menu command: Undo, Redo, Play, Pause, or one on the selection (nothing without one).
     void RunEditCommand(EditCommand command);
+    // Play mode (M18): Play starts the scene's components from a snapshot of the scene, Stop puts
+    // the snapshot back (see SceneEditor::BeginPlay). Pause stops the updates without leaving.
+    void Play();
+    void Stop();
+    // Returns the button's command (Play or Pause), run after the windows like the Edit menu's.
+    std::optional<EditCommand> DrawPlayButtons();
+    // File > Build...: asks to save, then for a folder, then builds into it (see Builder.h).
+    void ShowBuildDialog();
     // A file double-clicked in the Project window: a scene opens, a model is placed.
     void OpenFile(const std::string& path);
     void DrawSavePrompt();
@@ -90,6 +103,7 @@ private:
     std::unique_ptr<SceneEditor> m_Editor;
 
     SceneView m_SceneView;
+    GameView m_GameView;
     HierarchyWindow m_Hierarchy;
     ProjectWindow m_ProjectWindow;
     WindowVisibility m_Show;

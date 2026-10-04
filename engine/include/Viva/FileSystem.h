@@ -38,6 +38,10 @@ std::string NormalizePath(std::string_view path);
 std::string GetFileStem(std::string_view path);
 // A file's extension in lower case, without the dot: "png" for "C:/Game/Crate.PNG", "" for none.
 std::string GetFileExtension(std::string_view path);
+// A file's name with its extension: "Main.scene" for "C:/Game/Scenes/Main.scene".
+std::string GetFileName(std::string_view path);
+// The folder something is in: "C:/Game/Scenes" for "C:/Game/Scenes/Main.scene".
+std::string GetParentFolder(std::string_view path);
 
 // Reads a whole file into memory. Returns std::nullopt (after logging why) if it can't.
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path);
@@ -58,6 +62,14 @@ bool CreateFolder(const std::string& path);
 // The names of what's directly inside a folder (files and folders, without their paths), or an
 // empty list if it can't be read.
 std::vector<std::string> ListFolder(const std::string& path);
+
+// Copies a file, replacing `to` if it exists, or a folder with everything in it into `to` (made
+// if missing). Return false (after logging why) if something couldn't be copied, including a
+// missing `from`, or a folder copied into itself, which would never end. (Not named
+// CopyFile: Windows' own headers define CopyFile as a macro, which would rename this one in any
+// file that includes them.)
+bool CopyFileTo(const std::string& from, const std::string& to);
+bool CopyFolderTo(const std::string& from, const std::string& to);
 
 // Deletes a folder and everything in it, for good: it doesn't go to the Recycle Bin. Returns false
 // (after logging why) if something couldn't be deleted.

@@ -60,33 +60,31 @@ void SceneView::Draw(Renderer& renderer, SceneEditor& editor, bool* open)
     if (visible) {
         DrawToolbar();
 
-        // The image is as big as the space the window has left, in pixels: ImGui works in points,
-        // which a Retina screen has two pixels per. The renderer makes an image of that size for
-        // the next frame; this frame shows the current one, stretched if the size just changed.
+        // The image fills the space the window has left: the scene from the editor camera, with
+        // the grid, and a background like the game's.
         const ImVec2 size = ImGui::GetContentRegionAvail();
-        const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
-        const auto width = static_cast<uint32_t>(std::max(size.x * scale.x, 0.0f));
-        const auto height = static_cast<uint32_t>(std::max(size.y * scale.y, 0.0f));
-        renderer.SetSceneTargetSize(width, height);
-        if (const uint64_t texture = renderer.GetSceneTexture(); texture != 0 && width > 0 && height > 0) {
-            // The image area is an invisible button that takes the left mouse button: an ImGui
-            // item, so ImGui knows when a press on it starts (IsItemActivated), lasts (IsItemActive)
-            // and ends, as for any button. A gizmo drag is exactly that. While it's held, the
-            // window doesn't move, and the editor knows not to end the undo step yet. The picture
-            // is drawn on it with the draw list.
-            const ImVec2 min = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("SceneImage", size, ImGuiButtonFlags_MouseButtonLeft);
+        const Camera* camera = editor.GetScene().GetMainCamera();
+        const RenderView view {
+            .View = m_Camera.ViewMatrix(),
+            .Projection = m_Camera.ProjectionMatrix(size.x / size.y),
+            .ClearColor = camera ? camera->BackgroundColor : kDefaultBackground,
+            .Grid = true,
+        };
+        const ImVec2 min = ImGui::GetCursorScreenPos();
+        if (DrawSceneImage(renderer, m_Target, size, view)) {
+            // The image is an ImGui item (see DrawSceneImage), so ImGui knows when a press on it
+            // starts, lasts and ends, as for any button. A gizmo drag is exactly that; while it's
+            // held, the editor knows not to end the undo step yet.
             hovered = ImGui::IsItemHovered();
             const bool pressed = ImGui::IsItemActivated();
             const bool held = ImGui::IsItemActive();
             ImDrawList& drawList = *ImGui::GetWindowDrawList();
-            drawList.AddImage(ImTextureRef(static_cast<ImTextureID>(texture)), min, ImVec2(min.x + size.x, min.y + size.y));
 
             m_Viewport = {
                 .ImageMin = { min.x, min.y },
                 .ImageSize = { size.x, size.y },
-                .View = m_Camera.ViewMatrix(),
-                .Projection = m_Camera.ProjectionMatrix(size.x / size.y),
+                .View = view.View,
+                .Projection = view.Projection,
                 .CameraPosition = m_Camera.Position,
             };
 
@@ -184,14 +182,6 @@ void SceneView::DrawSelectionOutline(ImDrawList& drawList, const SceneEditor& ed
 void SceneView::Update(float dt)
 {
     m_Looking = m_Camera.Update(dt);
-}
-
-void SceneView::Render(Renderer& renderer, const Scene& scene) const
-{
-    renderer.SetCamera(m_Camera.ViewMatrix(), m_Camera.ProjectionMatrix(renderer.GetAspectRatio()));
-    const Camera* camera = scene.GetMainCamera();
-    renderer.SetClearColor(camera ? camera->BackgroundColor : kDefaultBackground);
-    renderer.DrawGrid();
 }
 
 void SceneView::StartAtMainCamera(const Scene& scene)

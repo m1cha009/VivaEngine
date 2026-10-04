@@ -61,9 +61,21 @@ public:
     void EndFrame(bool userIsEditing);
 
     // Undo and Redo (Ctrl+Z, Ctrl+Y). Each replaces the scene with a snapshot, and selects what
-    // was selected then. Each first finishes an edit still in progress.
-    bool CanUndo() const { return m_Changing || !m_Undo.empty(); }
-    bool CanRedo() const { return !m_Redo.empty(); }
+    // was selected then. Each first finishes an edit still in progress. Not in Play mode.
+    bool CanUndo() const { return !m_Playing && (m_Changing || !m_Undo.empty()); }
+    bool CanRedo() const { return !m_Playing && !m_Redo.empty(); }
+
+    // Play mode (M18), like Unity's: BeginPlay keeps the scene as it is (the current snapshot,
+    // after finishing any edit) and starts its components (Application::SetSceneUpdating); EndPlay
+    // stops them and puts the snapshot back, so whatever the game and the user changed while
+    // playing is gone. In between, changes aren't undo steps and don't count as unsaved. The
+    // selection stays on the same object if it existed before Play. Paused, the components stop
+    // updating but Play mode goes on.
+    void BeginPlay();
+    void EndPlay();
+    void SetPaused(bool paused);
+    bool IsPlaying() const { return m_Playing; }
+    bool IsPaused() const { return m_Paused; }
     void Undo();
     void Redo();
 
@@ -113,6 +125,8 @@ private:
     std::vector<Snapshot> m_Undo;   // the states before it, oldest first
     std::vector<Snapshot> m_Redo;   // the states undone, most recently undone last
     bool m_Changing = false;        // the scene changed since m_Current: an edit is in progress
+    bool m_Playing = false;         // in Play mode: m_Current is the scene to go back to
+    bool m_Paused = false;          // in Play mode, with the components' updates stopped
     uint64_t m_NextStep = 0;
     uint64_t m_SavedStep = 0;       // the step that matches the file
 };

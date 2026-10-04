@@ -60,8 +60,9 @@ public:
     // Returns the exit code for main().
     int Run();
 
-    // Ends the main loop after the current frame.
-    void Quit();
+    // Ends the main loop after the current frame. Run returns `exitCode`: 0 means success, anything
+    // else that something went wrong (scripts and build tools check it).
+    void Quit(int exitCode = 0);
 
     // The renderer: create meshes, textures and materials with it (from OnStart on). See
     // Viva/Renderer.h.
@@ -74,6 +75,10 @@ public:
     // The scene: the GameObjects that make up the game world, from OnStart to OnShutdown. It's
     // drawn from its main camera every frame (see Viva/Scene.h).
     Scene& GetScene() { return *m_Scene; }
+    // Whether the scene's components update (OnStart, OnUpdate, OnLateUpdate, OnFixedUpdate) each
+    // frame; it's still drawn either way. On by default. The editor turns it off while editing,
+    // like Unity's Edit mode, where scripts don't run, and on in Play mode.
+    void SetSceneUpdating(bool updating) { m_SceneUpdating = updating; }
 
 protected:
     // "virtual" means a derived class can replace the function, as in C#. Unlike C#, the
@@ -95,10 +100,6 @@ protected:
     virtual void OnFixedUpdate(float /*fixedDt*/) {}
     // Called once after the loop ends, while the window still exists. Like OnDestroy().
     virtual void OnShutdown() {}
-    // Called once per frame after the scene has been handed to the renderer (its MeshRenderers
-    // submitted, its main camera set) and before the frame is drawn: the place to draw from
-    // another camera (the editor's Scene view) or to submit more.
-    virtual void OnRender() {}
     // Called when the user closes the window. Return false to keep running, for example to ask
     // whether to save first, then call Quit() when it's time. Unity's Application.wantsToQuit.
     virtual bool OnQuitRequested() { return true; }
@@ -106,10 +107,6 @@ protected:
     // Changes the text in the window's title bar.
     void SetWindowTitle(const std::string& title);
 
-    // Whether the scene's components update (OnStart, OnUpdate, OnLateUpdate, OnFixedUpdate) each
-    // frame; it's still drawn either way. On by default. The editor turns it off while editing,
-    // like Unity's Edit mode, where scripts don't run.
-    void SetSceneUpdating(bool updating) { m_SceneUpdating = updating; }
 
     // Makes asset names start in `folder` (ending with a separator), for example a project's Assets
     // folder: a fresh Assets replaces the old one. What's loaded already stays while it's used.
@@ -128,6 +125,7 @@ private:
     std::unique_ptr<Assets> m_Assets;
     std::unique_ptr<Scene> m_Scene;
     bool m_QuitRequested = false;
+    int m_ExitCode = 0;
     bool m_SceneUpdating = true;
 };
 

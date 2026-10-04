@@ -67,7 +67,7 @@ VkDescriptorPool DescriptorAllocator::CreatePool()
     // FREE_DESCRIPTOR_SET lets sets be given back one at a time with vkFreeDescriptorSets.
     // Without it, a pool's sets can only be freed all together, by resetting or destroying it.
     const VkDescriptorPoolSize sizes[] = {
-        { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = kSetsPerPool },
+        { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = kSetsPerPool },
         { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = kSetsPerPool },
     };
     const VkDescriptorPoolCreateInfo info {

@@ -58,6 +58,19 @@ std::string GetFileStem(std::string_view path)
     return name.substr(0, name.rfind('.'));
 }
 
+std::string GetFileName(std::string_view path)
+{
+    const std::string normalized = NormalizePath(path);
+    return normalized.substr(normalized.rfind('/') + 1); // npos + 1 is 0: the whole name
+}
+
+std::string GetParentFolder(std::string_view path)
+{
+    const std::string normalized = NormalizePath(path);
+    const size_t slash = normalized.rfind('/');
+    return slash == std::string::npos ? std::string() : normalized.substr(0, slash);
+}
+
 std::string GetFileExtension(std::string_view path)
 {
     const std::string normalized = NormalizePath(path);
@@ -141,6 +154,39 @@ std::vector<std::string> ListFolder(const std::string& path)
     if (!SDL_EnumerateDirectory(path.c_str(), addName, &names))
         return {};
     return names;
+}
+
+bool CopyFileTo(const std::string& from, const std::string& to)
+{
+    if (!SDL_CopyFile(from.c_str(), to.c_str())) {
+        Log::Error("Couldn't copy {} to {}: {}", from, to, SDL_GetError());
+        return false;
+    }
+    return true;
+}
+
+bool CopyFolderTo(const std::string& from, const std::string& to)
+{
+    // ListFolder can't tell an empty folder from a missing one, so that's checked first. A folder
+    // copied into itself would find its own copy inside, and copy that too, without end.
+    if (!IsFolder(from)) {
+        Log::Error("Couldn't copy the folder {}: it doesn't exist", from);
+        return false;
+    }
+    if (NormalizePath(to) == NormalizePath(from) || NormalizePath(to).starts_with(NormalizePath(from) + "/")) {
+        Log::Error("Couldn't copy the folder {} into {}: that's inside it", from, to);
+        return false;
+    }
+    // Like DeleteFolder, folder by folder: files are copied, folders copied by this same function.
+    if (!CreateFolder(to))
+        return false;
+    bool copied = true;
+    for (const std::string& name : ListFolder(from)) {
+        const std::string source = from + "/" + name;
+        const std::string target = to + "/" + name;
+        copied = (IsFolder(source) ? CopyFolderTo(source, target) : CopyFileTo(source, target)) && copied;
+    }
+    return copied;
 }
 
 bool DeleteFolder(const std::string& path)

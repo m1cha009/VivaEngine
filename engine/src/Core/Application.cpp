@@ -141,7 +141,6 @@ int Application::Run()
         // The scene removes what was destroyed this frame, then hands the renderer its main
         // camera and everything visible.
         m_Scene->Render(*m_Renderer);
-        OnRender();
 
         // The UI is complete: ImGui turns this frame's windows into lists of triangles, which
         // EndFrame draws over the scene.
@@ -162,7 +161,7 @@ int Application::Run()
     // The scene goes now, while the game object (this) and the renderer still exist, so its
     // components' destructors can still use both.
     m_Scene.reset();
-    return EXIT_SUCCESS;
+    return m_ExitCode;
 }
 
 void Application::SetAssetsFolder(const std::string& folder)
@@ -170,8 +169,9 @@ void Application::SetAssetsFolder(const std::string& folder)
     m_Assets = std::make_unique<Assets>(*m_Renderer, folder);
 }
 
-void Application::Quit()
+void Application::Quit(int exitCode)
 {
+    m_ExitCode = exitCode;
     m_QuitRequested = true;
 }
 
