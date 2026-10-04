@@ -14,6 +14,8 @@ public:
     float MoveSpeed = 5.0f;          // world units per second
     float LookSensitivity = 0.003f;  // radians per point of mouse movement
 
+    void VisitFields(Viva::FieldVisitor& fields) override;
+
 protected:
     void OnUpdate(float dt) override;
 };

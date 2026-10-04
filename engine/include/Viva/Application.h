@@ -7,8 +7,9 @@
 namespace Viva {
 
 // Declared, not defined: a pointer or unique_ptr to a type only needs a declaration. The game
-// never sees Window's definition (it lives in src/Platform/). Renderer's and Scene's are public, in
-// Viva/Renderer.h and Viva/Scene.h, for the games that use them.
+// never sees Window's definition (it lives in src/Platform/). The others are public, in
+// Viva/Assets.h, Viva/Renderer.h and Viva/Scene.h, for the games that use them.
+class Assets;
 class Renderer;
 class Scene;
 class Window;
@@ -80,19 +81,25 @@ protected:
     // Viva/Renderer.h.
     Renderer& GetRenderer() { return *m_Renderer; }
 
+    // The assets: meshes, textures, materials and models by name (see Viva/Assets.h), from
+    // OnStart on.
+    Assets& GetAssets() { return *m_Assets; }
+
     // The scene: the GameObjects that make up the game world, from OnStart to OnShutdown. It's
     // drawn from its main camera every frame (see Viva/Scene.h).
     Scene& GetScene() { return *m_Scene; }
 
 private:
     ApplicationSettings m_Settings;
-    // Members are destroyed in reverse order of declaration: renderer, then window, because the
-    // renderer's Vulkan surface belongs to the window. Both live until the Application itself is
-    // destroyed, after the game's own members (see ~Application). The scene is destroyed at the
-    // end of Run, after OnShutdown, while the game and the renderer still exist; it's declared
-    // last in case Run returns early.
+    // Members are destroyed in reverse order of declaration: the assets, whose GPU resources go
+    // back to the renderer, then the renderer, then the window, because the renderer's Vulkan
+    // surface belongs to the window. They live until the Application itself is destroyed, after
+    // the game's own members (see ~Application). The scene is destroyed at the end of Run, after
+    // OnShutdown, while the game and the renderer still exist; it's declared last in case Run
+    // returns early.
     std::unique_ptr<Window> m_Window;
     std::unique_ptr<Renderer> m_Renderer;
+    std::unique_ptr<Assets> m_Assets;
     std::unique_ptr<Scene> m_Scene;
     bool m_QuitRequested = false;
 };

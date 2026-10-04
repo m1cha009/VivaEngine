@@ -2,6 +2,7 @@
 
 #include "Core/ImageFile.h"
 #include "Platform/FileSystem.h"
+#include "Viva/Assets.h"
 #include "Viva/GameObject.h"
 #include "Viva/Log.h"
 #include "Viva/MeshData.h"
@@ -209,8 +210,8 @@ std::optional<MeshData> ReadPrimitive(const cgltf_primitive& primitive, const st
 // The texture for one of the file's images. An image is either stored inside the model's binary
 // data (always, in a .glb), or a file of its own next to a .gltf, which `folder` leads to.
 // Returns null (after logging why) if it can't be loaded.
-std::shared_ptr<Texture> TextureFromImage(Renderer& renderer, const cgltf_image& image, const std::string& folder,
-                                          const std::string& assetName)
+std::shared_ptr<Texture> TextureFromImage(Assets& assets, const cgltf_data& data, const cgltf_image& image,
+                                          const std::string& folder, const std::string& assetName)
 {
     if (image.buffer_view) {
         const uint8_t* bytes = cgltf_buffer_view_data(image.buffer_view);
@@ -222,7 +223,9 @@ std::shared_ptr<Texture> TextureFromImage(Renderer& renderer, const cgltf_image&
             DecodeImage(std::span(bytes, image.buffer_view->size), std::format("an image in {}", assetName));
         if (!decoded)
             return nullptr;
-        return renderer.CreateTexture(decoded->Width, decoded->Height, decoded->Pixels);
+        // Named after its place in the file, the way scene files will refer to it.
+        return assets.GetRenderer().CreateTexture(decoded->Width, decoded->Height, decoded->Pixels,
+                                                  std::format("{}#image{}", assetName, cgltf_image_index(&data, &image)));
     }
 
     if (!image.uri) {
@@ -238,13 +241,13 @@ std::shared_ptr<Texture> TextureFromImage(Renderer& renderer, const cgltf_image&
     // cgltf_decode_uri undoes in place.
     std::string file = image.uri;
     file.resize(cgltf_decode_uri(file.data()));
-    return renderer.LoadTexture(folder + file);
+    return assets.GetTexture(folder + file);
 }
 
 // The file's materials, in the file's order. Only their base color is used: a color and a
 // texture, multiplied as in the Unlit shader. The rest of a glTF material (metalness, roughness,
 // normal maps, emission) describes how light reacts, and the renderer has no lighting yet.
-std::vector<std::shared_ptr<Material>> LoadMaterials(Renderer& renderer, const cgltf_data& data,
+std::vector<std::shared_ptr<Material>> LoadMaterials(Assets& assets, const cgltf_data& data,
                                                      const std::string& folder, const std::string& assetName)
 {
     // One texture per image, made when a material first uses it. The truck's body and wheels
@@ -259,39 +262,38 @@ std::vector<std::shared_ptr<Material>> LoadMaterials(Renderer& renderer, const c
         if (texture && texture->image) {
             std::shared_ptr<Texture>& loaded = textures[cgltf_image_index(&data, texture->image)];
             if (!loaded)
-                loaded = TextureFromImage(renderer, *texture->image, folder, assetName);
+                loaded = TextureFromImage(assets, data, *texture->image, folder, assetName);
             settings.Texture = loaded;
         }
-        materials.push_back(renderer.CreateMaterial(settings));
+        materials.push_back(assets.GetMaterial(settings));
     }
     return materials;
 }
 
 // The file's meshes, in the file's order, each as a list of parts: one per primitive, with its
-// material.
-std::vector<std::vector<MeshPart>> LoadMeshes(Renderer& renderer, const cgltf_data& data,
-                                              const std::vector<std::shared_ptr<Material>>& materials)
+// material. Each primitive's mesh is named after its place in the file, the way scene files will
+// refer to it: "models/CesiumMilkTruck.glb#mesh2/0" is mesh 2's primitive 0.
+std::vector<std::vector<MeshPart>> LoadMeshes(Assets& assets, const cgltf_data& data,
+                                              const std::vector<std::shared_ptr<Material>>& materials,
+                                              const std::string& assetName)
 {
-    // For primitives without a material: glTF's default material is plain white.
-    std::shared_ptr<Material> defaultMaterial;
-
     std::vector<std::vector<MeshPart>> meshes;
     for (size_t i = 0; i < data.meshes_count; ++i) {
         const cgltf_mesh& mesh = data.meshes[i];
         const std::string meshName = mesh.name ? mesh.name : std::format("number {}", i);
         std::vector<MeshPart>& parts = meshes.emplace_back();
-        for (const cgltf_primitive& primitive : std::span(mesh.primitives, mesh.primitives_count)) {
+        for (size_t p = 0; p < mesh.primitives_count; ++p) {
+            const cgltf_primitive& primitive = mesh.primitives[p];
             const std::optional<MeshData> meshData = ReadPrimitive(primitive, meshName);
             if (!meshData)
                 continue;
-            std::shared_ptr<Material> material =
-                primitive.material ? materials[cgltf_material_index(&data, primitive.material)] : nullptr;
-            if (!material) {
-                if (!defaultMaterial)
-                    defaultMaterial = renderer.CreateMaterial({});
-                material = defaultMaterial;
-            }
-            if (std::shared_ptr<Mesh> gpuMesh = renderer.CreateMesh(*meshData))
+            // Without a material, glTF's default: plain white.
+            std::shared_ptr<Material> material = primitive.material
+                                                     ? materials[cgltf_material_index(&data, primitive.material)]
+                                                     : assets.GetMaterial({});
+            std::shared_ptr<Mesh> gpuMesh =
+                assets.GetRenderer().CreateMesh(*meshData, std::format("{}#mesh{}/{}", assetName, i, p));
+            if (gpuMesh && material)
                 parts.push_back({ std::move(gpuMesh), std::move(material) });
         }
     }
@@ -311,7 +313,7 @@ std::string NodeName(const cgltf_node& node, size_t index)
 
 } // namespace
 
-std::unique_ptr<Model> Model::Load(Renderer& renderer, const std::string& assetName)
+std::unique_ptr<Model> Model::Load(Assets& assets, const std::string& assetName)
 {
     const CgltfData data = Parse(GetAssetPath(assetName));
     if (!data)
@@ -334,8 +336,8 @@ std::unique_ptr<Model> Model::Load(Renderer& renderer, const std::string& assetN
     model->m_Name = fileName.substr(0, fileName.rfind('.'));
 
     // The materials first (with the textures they use), then the meshes that use them.
-    const std::vector<std::shared_ptr<Material>> materials = LoadMaterials(renderer, *data, folder, assetName);
-    const std::vector<std::vector<MeshPart>> meshes = LoadMeshes(renderer, *data, materials);
+    const std::vector<std::shared_ptr<Material>> materials = LoadMaterials(assets, *data, folder, assetName);
+    const std::vector<std::vector<MeshPart>> meshes = LoadMeshes(assets, *data, materials, assetName);
 
     // The nodes keep the file's numbering, so a node's children are the same numbers as in the
     // file. Nodes that show the same mesh (the truck's two axles) get copies of its part list:
@@ -371,6 +373,34 @@ std::unique_ptr<Model> Model::Load(Renderer& renderer, const std::string& assetN
     Log::Trace("Model loaded: {} ({} nodes, {} meshes, {} materials, {} images)", assetName, data->nodes_count,
                data->meshes_count, data->materials_count, data->images_count);
     return model;
+}
+
+// Both search the nodes' parts, where every mesh and material the model loaded ends up. A model
+// has tens of parts at most, and this only runs while a scene file loads.
+
+std::shared_ptr<Mesh> Model::FindMesh(const std::string& assetName) const
+{
+    for (const Node& node : m_Nodes) {
+        for (const MeshPart& part : node.Parts) {
+            if (Renderer::GetAssetName(*part.Mesh) == assetName)
+                return part.Mesh;
+        }
+    }
+    Log::Error("The model {} has no mesh {}", m_Name, assetName);
+    return nullptr;
+}
+
+std::shared_ptr<Texture> Model::FindTexture(const std::string& assetName) const
+{
+    for (const Node& node : m_Nodes) {
+        for (const MeshPart& part : node.Parts) {
+            const std::shared_ptr<Texture>& texture = Renderer::GetSettings(*part.Material).Texture;
+            if (texture && Renderer::GetAssetName(*texture) == assetName)
+                return texture;
+        }
+    }
+    Log::Error("The model {} has no texture {}", m_Name, assetName);
+    return nullptr;
 }
 
 GameObject& Model::Instantiate(Scene& scene, GameObject* parent) const

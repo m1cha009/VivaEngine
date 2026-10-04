@@ -41,4 +41,14 @@ std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path)
     return result;
 }
 
+bool WriteTextFile(const std::string& path, std::string_view text)
+{
+    // SDL_SaveFile is SDL_LoadFile's opposite: the whole file in one go, from a UTF-8 path.
+    if (!SDL_SaveFile(path.c_str(), text.data(), text.size())) {
+        Log::Error("Couldn't write {}: {}", path, SDL_GetError());
+        return false;
+    }
+    return true;
+}
+
 } // namespace Viva

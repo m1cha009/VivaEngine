@@ -38,6 +38,11 @@ public:
     bool IsActiveSelf() const { return m_Active; }
     bool IsActiveInHierarchy() const;
 
+    // Scene::Destroy was called on this object or one above it: it leaves the scene at the end of
+    // the frame, and until then it no longer updates. (Unity's destroyed objects compare equal to
+    // null from then on.)
+    bool IsDestroyed() const { return m_Destroyed; }
+
     // Creates a component of type T, attaches it and returns it: Unity's AddComponent<T>(), except
     // that any arguments are passed on to T's constructor:
     //     GameObject& crate = scene.CreateGameObject("Crate");
@@ -49,6 +54,10 @@ public:
     // Unity's GetComponent<T>().
     template <typename T>
     T* GetComponent() const;
+
+    // Every component, in the order they were added: Unity's GetComponents<Component>(), for tools
+    // such as scene files and the inspector.
+    const std::vector<std::unique_ptr<Component>>& GetComponents() const { return m_Components; }
 
 private:
     // The scene drives the components through these, and handles destruction.

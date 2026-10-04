@@ -1,5 +1,6 @@
 #include "Viva/Camera.h"
 
+#include "Viva/FieldVisitor.h"
 #include "Viva/Transform.h"
 
 #include <glm/geometric.hpp>
@@ -26,6 +27,15 @@ glm::mat4 Camera::ProjectionMatrix(float aspect) const
     // Depth comes out as 0 (near plane) to 1 (far plane), because GLM_FORCE_DEPTH_ZERO_TO_ONE is
     // set (see cmake/Dependencies.cmake).
     return glm::perspective(FieldOfView, aspect, NearPlane, FarPlane);
+}
+
+void Camera::VisitFields(FieldVisitor& fields)
+{
+    // In radians, like the field itself.
+    fields.Field("FieldOfView", FieldOfView);
+    fields.Field("NearPlane", NearPlane);
+    fields.Field("FarPlane", FarPlane);
+    fields.Field("BackgroundColor", BackgroundColor);
 }
 
 } // namespace Viva

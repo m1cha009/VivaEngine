@@ -2,6 +2,7 @@
 
 namespace Viva {
 
+class FieldVisitor;
 class GameObject;
 class Transform;
 
@@ -34,6 +35,13 @@ public:
     // gameObject and transform.
     GameObject& GetGameObject() const { return *m_GameObject; }
     Transform& GetTransform() const;
+
+    // Hands each field that belongs in a scene file to `fields` (see Viva/FieldVisitor.h): the
+    // settings of the component, like a MonoBehaviour's serialized fields. Runtime state, such as
+    // pointers to other objects found in OnStart, stays out. To be saved and loaded, a component
+    // type must also be registered (see Viva/ComponentRegistry.h). Without an override, a
+    // component has no fields: it's saved as just its type.
+    virtual void VisitFields(FieldVisitor& /*fields*/) {}
 
 protected:
     // Protected: only derived classes construct a Component, never code that wants a plain one.

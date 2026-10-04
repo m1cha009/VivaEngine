@@ -70,11 +70,11 @@ VivaEngine/
 │       ├── Core/           # Application, Log, Assert, Time
 │       ├── Platform/       # Window, Input (SDL3 lives only here)
 │       ├── Renderer/       # all Vulkan code
-│       └── Scene/          # Scene, GameObject, Component, Transform, Camera (since M10), Model (M11)
+│       └── Scene/          # Scene, GameObject, Component, Transform, Camera (since M10), Model (M11), Assets and scene files (M13)
 ├── sandbox/                # executable target: test app / game using the engine
 ├── editor/                 # executable target: VivaEditor, Project Manager + scene editor (since M14)
 ├── shaders/                # GLSL sources
-├── assets/
+├── assets/                 # textures, models, scenes (scene files since M13)
 ├── scripts/                # build.cmd: Windows command-line build through vcvars64.bat
 └── docs/
     ├── Guide.md            # how to use the engine: build, run, make a scene, cheat sheet (keep it current)
@@ -237,8 +237,8 @@ Run these and report the results:
 
 ## Status
 
-- **Current milestone:** none. M0–M12 are done (M0–M8 on 2026-10-03, M9–M12 on 2026-10-04). Next: M13 (scene serialization), the first of the editor milestones planned in `docs/EditorRoadmap.md`, once Michail says to start.
-- **Verified on Windows:** M0–M12, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
+- **Current milestone:** none. M0–M13 are done (M0–M8 on 2026-10-03, M9–M13 on 2026-10-04). Next: M14 (projects and the Project Manager, see `docs/EditorRoadmap.md`), once Michail says to start.
+- **Verified on Windows:** M0–M13, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
 - **macOS:** dropped on 2026-10-04 and never tested on a real Mac. The macOS CI was green through M11 before it was deleted.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
@@ -575,3 +575,21 @@ Append one line per decision: date, decision, reason.
   - **ImGui switches to its docking build** (`v1.92.9b-docking`) in M15, for a Unity-like dockable layout.
   - **Gizmos are hand-written** (M17), not ImGuizmo.
 - 2026-10-04: **macOS dropped** (Michail's decision): Windows is the only platform. New code needn't be Mac-ready, `.github/workflows/macos.yml` was deleted (with the README badge), and `docs/MacChecklist.md` is archived as it stood after M12. Existing Mac code and the `macos-*` presets stay while they cost nothing. Earlier decision-log entries and milestone docs that mention the Mac are left as history.
+- 2026-10-04: M13 design:
+  - **JSON:** `Core/Json` (private): a `std::variant` value with order-keeping objects (vector of pairs), a recursive-descent parser that reports the first error by line and column, and a writer that indents two spaces and keeps number arrays on one line. Numbers go through `from_chars`/`to_chars`; floats through `FloatToJsonNumber` (the shortest exact text), so files say `0.1` and round trips are exact.
+  - **Fields:** `Viva/FieldVisitor.h`. Components override `VisitFields(FieldVisitor&)` (public, virtual, empty by default); `Transform` has a non-virtual one; `VisitFields(FieldVisitor&, MaterialSettings&)` is a free function. Overloads for float, vec2, vec3, vec4, quat, and shared_ptr to Mesh, Texture and Material; lists via a `List(name, vector, lambda)` template on protected Begin/End virtuals. Missing fields keep their values, unknown ones are ignored, wrong types warn. The M16 Inspector is meant to be a third visitor.
+  - **Registry:** `Viva/ComponentRegistry.h`, a static class. `Register<T>(name)` stores the name, `typeid(T)` and `&Create<T>`; the engine's MeshRenderer, Camera and Spinner are registered on first use. Explicit registration, because self-registering globals in a static library can be dropped by the linker.
+  - **Assets:** `Viva/Assets.h`, owned by `Application` (`GetAssets()`), created after the renderer and destroyed before it. Names: `Primitives::Cube|Plane|Sphere|Cylinder`, file paths, and `<model>#mesh<i>/<p>` / `<model>#image<i>` for what a model holds. Primitives, textures and materials are cached as `weak_ptr`s; models as `shared_ptr`s until the application ends. `GetMaterial(settings)` shares a live material with equal settings (`MaterialSettings` has a defaulted `operator==`). `Renderer::LoadTexture` moved here (`GetTexture`), and `Model::Load` became private (`Assets::GetModel`), which closes the M7 deferral "resolve asset names in one place".
+  - **Names on resources:** `CreateMesh`/`CreateTexture` take an optional asset name, stored on the internal `Mesh`/`Texture`; `Renderer::GetAssetName` and `GetSettings(Material)` are static readers. `Material` keeps its `MaterialSettings` as given (texture may be null) next to the texture it binds (white for null).
+  - **Scene files:** `Scene::Save(path)` / `Scene::Load(path, assets)` in `Scene/SceneFile.cpp` (Scene members in a second .cpp). Format `{"Format": "VivaEngine Scene", "Version": 1, "GameObjects": [...]}`, children nested, empty `Components`/`Children` omitted, quaternions as x, y, z, w. Load is additive and refuses newer versions. Unregistered components, and meshes and textures made in code, are skipped on save with a warning each. Rotations are normalized on load only when visibly off length 1, so save → load → save is byte-identical. `WriteTextFile` (`SDL_SaveFile`) joins `ReadBinaryFile`. Public `GameObject::GetComponents()` and `IsDestroyed()`.
+  - **Rendering:** `MaterialSettings::Tiling`/`Offset`, pushed as a vec4 after the color (push constants 80 → 96 bytes), applied in `Unlit.vert`.
+  - **Primitives:** `Sphere` (radius 0.5, 32 × 16, seam column, degenerate pole triangles) and `Cylinder` (radius 0.5, height 2, separate cap vertices), as grids via `AddGrid`. `Plane()` is always 10 × 10 (`kPlaneSize`), like Unity's.
+  - **Sandbox:** `Spinner` moved into the engine. `--save <file>` saves right after the scene is built; `--load <file>` shows a file instead. FlyCamera and TruckWheels are registered in `OnStart` and have fields. The demo uses only assets (pillars are cubes with eight colored materials; the floor is the scaled plane, tiled 14×). `assets/scenes/Demo.scene` (written by `--demo --save`) and `Shapes.scene` (hand-written) are copied as assets.
+- 2026-10-04: M13 `/simplify` pass:
+  - **Material fields listed once:** the JSON writer and reader both spelled out Texture/Color/Tiling/Offset. Added `vec2` and `Texture` overloads and `VisitFields(FieldVisitor&, MaterialSettings&)`; each visitor's material overload only opens the nested object.
+  - **One way to tile:** `Primitives::Plane` lost its size and repeat parameters; the Lane Runner's road and grass are the shared plane asset, scaled, with tiled materials. `kPlaneSize` replaces a magic 10.
+  - **One factory:** the engine's components register through `Register<T>` (`RegisterEngineComponents`, guarded by a plain flag) instead of a second copy of the factory lambda.
+  - **TruckWheels turns the axles itself** instead of adding Spinners in `OnStart`, which a scene saved afterwards would hold and a reload would double.
+  - `JsonFieldWriter` lost its derivable list stack; float reading moved out of `ReadFloats`.
+  - Skipped: registering model sub-assets in Assets' caches instead of `Model::FindMesh`/`FindTexture` (load-time only, and it moves code more than it removes); hiding the asset-name parameter from the public Renderer API (the alternatives need friends or internal headers); saving model instances as prefab references (a known limitation, for later).
+  - Noted for M14+: models stay loaded until exit, which matters once the editor switches scenes (add something like Unity's `Resources.UnloadUnusedAssets`). The sandbox inspector still lists fields by hand until M16's visitor replaces it.

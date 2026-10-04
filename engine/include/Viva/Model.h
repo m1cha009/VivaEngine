@@ -12,8 +12,8 @@
 
 namespace Viva {
 
+class Assets;
 class GameObject;
-class Renderer;
 class Scene;
 
 // A 3D model loaded from a glTF file: its meshes, materials and textures, uploaded to the GPU
@@ -26,14 +26,11 @@ class Scene;
 // glTF ("GL Transmission Format") is the Khronos Group's file format for 3D models, which most 3D
 // tools export. A .gltf file is JSON describing the model, next to .bin files with the vertex data
 // and the image files; a .glb file packs all of it into one binary file.
+//
+// Get one from Assets::GetModel("models/CesiumMilkTruck.glb"), which loads each file once.
 class Model {
 public:
-    // Loads a .gltf or .glb file from the assets folder, for example "models/CesiumMilkTruck.glb".
-    // Returns nullptr (after logging why) if it can't. Like creating meshes and textures, this
-    // waits for the uploads to the GPU to finish: load models while loading (OnStart).
-    static std::unique_ptr<Model> Load(Renderer& renderer, const std::string& assetName);
-
-    Model() = default; // creates nothing: use Load()
+    Model() = default; // creates nothing: Assets loads models
 
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;
@@ -45,6 +42,19 @@ public:
     GameObject& Instantiate(Scene& scene, GameObject* parent = nullptr) const;
 
 private:
+    // Assets loads models, and finds the meshes and textures that scene files name inside them.
+    friend class Assets;
+
+    // Loads a .gltf or .glb file from the assets folder. Returns nullptr (after logging why) if it
+    // can't. Like creating meshes and textures, this waits for the uploads to the GPU to finish.
+    // Its meshes and the images stored inside it get asset names (see Assets.h); its image files
+    // and materials come from `assets`, so they're shared with everything else that uses them.
+    static std::unique_ptr<Model> Load(Assets& assets, const std::string& assetName);
+
+    // The model's mesh or texture with this asset name, or nullptr (after logging why).
+    std::shared_ptr<Mesh> FindMesh(const std::string& assetName) const;
+    std::shared_ptr<Texture> FindTexture(const std::string& assetName) const;
+
     // A node: one point in the file's hierarchy, placed relative to its parent, which may show a
     // mesh.
     struct Node {

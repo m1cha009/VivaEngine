@@ -1,7 +1,6 @@
 #include "LaneRunner.h"
 
 #include "Road.h"
-#include "Spinner.h"
 #include "TruckController.h"
 
 #include "Viva/Assert.h"
@@ -9,6 +8,7 @@
 #include "Viva/Input.h"
 #include "Viva/MeshRenderer.h"
 #include "Viva/Scene.h"
+#include "Viva/Spinner.h"
 #include "Viva/Transform.h"
 
 #include <glm/vec2.hpp>
@@ -74,7 +74,7 @@ void HudText(ImDrawList& drawList, ImFont* font, float size, ImVec2 position, st
 } // namespace
 
 LaneRunner::LaneRunner(TruckController& truck, std::shared_ptr<Mesh> crateMesh, std::shared_ptr<Material> crateMaterial,
-                       std::unique_ptr<Model> pickupModel, ImFont* hudFont)
+                       std::shared_ptr<Model> pickupModel, ImFont* hudFont)
     : m_Truck(truck)
     , m_CrateMesh(std::move(crateMesh))
     , m_CrateMaterial(std::move(crateMaterial))

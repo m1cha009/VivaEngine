@@ -1,6 +1,7 @@
 #include "Viva/Transform.h"
 
 #include "Viva/Assert.h"
+#include "Viva/FieldVisitor.h"
 #include "Viva/GameObject.h"
 
 #include <glm/geometric.hpp>
@@ -126,6 +127,13 @@ Transform* Transform::Find(std::string_view path) const
             return found;
     }
     return nullptr;
+}
+
+void Transform::VisitFields(FieldVisitor& fields)
+{
+    fields.Field("Position", LocalPosition);
+    fields.Field("Rotation", LocalRotation);
+    fields.Field("Scale", LocalScale);
 }
 
 } // namespace Viva

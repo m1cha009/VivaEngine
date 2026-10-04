@@ -1,7 +1,5 @@
 #include "Viva/Renderer.h"
 
-#include "Core/ImageFile.h"
-#include "Platform/FileSystem.h"
 #include "Platform/Window.h"
 #include "Renderer/DescriptorAllocator.h"
 #include "Renderer/FrameResources.h"
@@ -27,7 +25,6 @@
 #include <iterator>
 #include <span>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -37,11 +34,12 @@ namespace {
 
 // The per-draw data, pushed with vkCmdPushConstants right before each draw, laid out like
 // "push_constant uniform Object" in the shaders: the object's model matrix, then its material's
-// color. Push constants are the quickest way to hand a draw a little data; every GPU takes at
-// least 128 bytes of them, and this is 80.
+// color, then its material's texture tiling (xy) and offset (zw). Push constants are the quickest
+// way to hand a draw a little data; every GPU takes at least 128 bytes of them, and this is 96.
 struct ObjectPushConstants {
     glm::mat4 Model;
     glm::vec4 Color;
+    glm::vec4 TilingOffset;
 };
 constexpr VkPushConstantRange kPushConstantRange {
     .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -74,9 +72,9 @@ public:
     // The steps of Renderer::Create. Returns false (after logging why) if one fails.
     bool Initialize();
 
-    std::shared_ptr<Mesh> CreateMesh(const MeshData& data);
-    std::shared_ptr<Texture> LoadTexture(const std::string& assetName);
-    std::shared_ptr<Texture> CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
+    std::shared_ptr<Mesh> CreateMesh(const MeshData& data, std::string assetName);
+    std::shared_ptr<Texture> CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels,
+                                           std::string assetName);
     std::shared_ptr<Material> CreateMaterial(const MaterialSettings& settings);
     void Submit(const Mesh& mesh, const Material& material, const glm::mat4& transform);
     const RenderStats& GetStats() const { return m_Stats; }
@@ -137,9 +135,6 @@ private:
     // created without one.
     std::shared_ptr<Shader> m_DefaultShader; // Unlit
     std::shared_ptr<Texture> m_WhiteTexture; // 1x1 white: "no texture"
-    // Textures loaded by name, so loading one again shares it. A weak_ptr remembers an object
-    // without keeping it alive (C#'s WeakReference).
-    std::unordered_map<std::string, std::weak_ptr<Texture>> m_TextureCache;
 
     std::vector<DrawCommand> m_DrawList; // this frame's Submits
     CameraUniforms m_Camera {};          // from SetCamera
@@ -170,9 +165,8 @@ std::unique_ptr<Renderer> Renderer::Create(const Window& window, bool vsync)
 Renderer::Renderer() = default;
 Renderer::~Renderer() = default;
 
-std::shared_ptr<Mesh> Renderer::CreateMesh(const MeshData& data) { return m_Impl->CreateMesh(data); }
-std::shared_ptr<Texture> Renderer::LoadTexture(const std::string& assetName) { return m_Impl->LoadTexture(assetName); }
-std::shared_ptr<Texture> Renderer::CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels) { return m_Impl->CreateTexture(width, height, pixels); }
+std::shared_ptr<Mesh> Renderer::CreateMesh(const MeshData& data, std::string assetName) { return m_Impl->CreateMesh(data, std::move(assetName)); }
+std::shared_ptr<Texture> Renderer::CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels, std::string assetName) { return m_Impl->CreateTexture(width, height, pixels, std::move(assetName)); }
 std::shared_ptr<Material> Renderer::CreateMaterial(const MaterialSettings& settings) { return m_Impl->CreateMaterial(settings); }
 const RenderStats& Renderer::GetStats() const { return m_Impl->GetStats(); }
 void Renderer::SetVSync(bool enabled) { m_Impl->SetVSync(enabled); }
@@ -182,6 +176,9 @@ void Renderer::SetClearColor(const glm::vec3& color) { m_Impl->SetClearColor(col
 float Renderer::GetAspectRatio() const { return m_Impl->GetAspectRatio(); }
 bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
 void Renderer::EndFrame() { m_Impl->EndFrame(); }
+const std::string& Renderer::GetAssetName(const Mesh& mesh) { return mesh.GetAssetName(); }
+const std::string& Renderer::GetAssetName(const Texture& texture) { return texture.GetAssetName(); }
+const MaterialSettings& Renderer::GetSettings(const Material& material) { return material.GetSettings(); }
 
 void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const std::shared_ptr<Material>& material,
                       const glm::mat4& transform)
@@ -271,7 +268,7 @@ bool Renderer::Impl::Initialize()
     if (!m_DefaultShader)
         return false;
     constexpr uint8_t kWhitePixel[] = { 255, 255, 255, 255 };
-    m_WhiteTexture = CreateTexture(1, 1, kWhitePixel);
+    m_WhiteTexture = CreateTexture(1, 1, kWhitePixel, {});
 
     // The debug UI is drawn in the same rendering as the scene, so its pipeline is built for the
     // same color and depth formats.
@@ -280,34 +277,19 @@ bool Renderer::Impl::Initialize()
     return m_ImGui != nullptr;
 }
 
-std::shared_ptr<Mesh> Renderer::Impl::CreateMesh(const MeshData& data)
+std::shared_ptr<Mesh> Renderer::Impl::CreateMesh(const MeshData& data, std::string assetName)
 {
     if (data.Vertices.empty() || data.Indices.empty()) {
         Log::Error("Can't create a mesh without vertices and indices");
         return nullptr;
     }
-    return Track(Mesh::Create(*m_Context, data));
+    std::unique_ptr<Mesh> mesh = Mesh::Create(*m_Context, data);
+    mesh->SetAssetName(std::move(assetName));
+    return Track(std::move(mesh));
 }
 
-std::shared_ptr<Texture> Renderer::Impl::LoadTexture(const std::string& assetName)
-{
-    // Already loaded and still in use? Then share it, like Unity's Resources.Load returning the
-    // same asset. lock() turns the weak_ptr into a shared_ptr, or null if the texture is gone.
-    std::weak_ptr<Texture>& cached = m_TextureCache[assetName];
-    if (std::shared_ptr<Texture> texture = cached.lock())
-        return texture;
-
-    // The file is decoded on the CPU (stb_image, M7), and the pixels are uploaded like any others.
-    const std::optional<ImageData> image = LoadImageFile(GetAssetPath(assetName));
-    if (!image)
-        return nullptr;
-    std::shared_ptr<Texture> texture = CreateTexture(image->Width, image->Height, image->Pixels);
-    Log::Trace("Texture loaded: {} ({}x{})", assetName, image->Width, image->Height);
-    cached = texture;
-    return texture;
-}
-
-std::shared_ptr<Texture> Renderer::Impl::CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels)
+std::shared_ptr<Texture> Renderer::Impl::CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels,
+                                                       std::string assetName)
 {
     // Every texture comes through here, so this one check covers them all. The pixels may come
     // from the game, so a mismatch is reported in every build, rather than read past the end.
@@ -316,7 +298,9 @@ std::shared_ptr<Texture> Renderer::Impl::CreateTexture(uint32_t width, uint32_t 
                    size_t { width } * height * 4, pixels.size());
         return nullptr;
     }
-    return Track(Texture::Create(*m_Context, width, height, pixels));
+    std::unique_ptr<Texture> texture = Texture::Create(*m_Context, width, height, pixels);
+    texture->SetAssetName(std::move(assetName));
+    return Track(std::move(texture));
 }
 
 std::shared_ptr<Shader> Renderer::Impl::LoadShader(const std::string& name)
@@ -336,7 +320,7 @@ std::shared_ptr<Shader> Renderer::Impl::LoadShader(const std::string& name)
 std::shared_ptr<Material> Renderer::Impl::CreateMaterial(const MaterialSettings& settings)
 {
     return Track(Material::Create(m_Context->GetDevice(), *m_Descriptors, m_MaterialSetLayout, m_DefaultShader,
-                                  settings.Texture ? settings.Texture : m_WhiteTexture, settings.Color));
+                                  settings.Texture ? settings.Texture : m_WhiteTexture, settings));
 }
 
 void Renderer::Impl::Submit(const Mesh& mesh, const Material& material, const glm::mat4& transform)
@@ -695,7 +679,12 @@ void Renderer::Impl::RecordDraws(VkCommandBuffer cmd)
             boundMesh = draw.Mesh;
         }
 
-        const ObjectPushConstants constants { .Model = draw.Transform, .Color = draw.Material->GetColor() };
+        const MaterialSettings& material = draw.Material->GetSettings();
+        const ObjectPushConstants constants {
+            .Model = draw.Transform,
+            .Color = material.Color,
+            .TilingOffset = glm::vec4(material.Tiling, material.Offset),
+        };
         vkCmdPushConstants(cmd, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(constants), &constants);
         draw.Mesh->Draw(cmd);
         m_Stats.Triangles += draw.Mesh->GetIndexCount() / 3;

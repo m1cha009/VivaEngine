@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Viva {
@@ -19,5 +20,9 @@ std::string GetAssetPath(const std::string& relativePath);
 // Reads a whole file into memory. The path is UTF-8. Returns std::nullopt (after logging why) if
 // it can't.
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path);
+
+// Writes `text` into a file, replacing it if it exists. The path is UTF-8. Returns false (after
+// logging why) if it can't.
+bool WriteTextFile(const std::string& path, std::string_view text);
 
 } // namespace Viva

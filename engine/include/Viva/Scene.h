@@ -8,6 +8,7 @@
 
 namespace Viva {
 
+class Assets;
 class Camera;
 class Renderer;
 
@@ -43,6 +44,21 @@ public:
 
     // Every GameObject, in the order they were created, for tools like a hierarchy window.
     const std::vector<std::unique_ptr<GameObject>>& GetGameObjects() const { return m_GameObjects; }
+
+    // Scene files (M13): every GameObject, with its name, active flag, Transform, components and
+    // children, as JSON text (see docs/milestones/M13.md for the format). Unity saves .unity files
+    // the same way, as text. Paths are UTF-8; both return false (after logging why) if the file
+    // can't be written or read.
+    //
+    // Save writes what each component's VisitFields hands over. Components whose type isn't
+    // registered (see Viva/ComponentRegistry.h), and meshes and textures made in code, can't be
+    // written: they're left out, with a warning for each.
+    bool Save(const std::string& path) const;
+    // Adds the file's GameObjects to the scene, next to any already in it (Unity's LoadScene with
+    // LoadSceneMode.Additive). Their meshes, textures and materials come from `assets`. A component
+    // type that isn't registered is left out, with a warning. Their OnStart runs before their first
+    // update, as for objects created in code.
+    bool Load(const std::string& path, Assets& assets);
 
 private:
     // The engine side, used by Application's main loop.

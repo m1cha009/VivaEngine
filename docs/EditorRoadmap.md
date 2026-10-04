@@ -39,16 +39,19 @@ MyGame/
 
 Saving and loading scenes underpins both goals: a project is mostly scene files.
 
-- [ ] JSON reading and writing (`Core/Json`), with no exceptions; errors give a line and a reason
-- [ ] A component registry: type name → factory, like Unity's `[Serializable]` + `AddComponent(Type)`
-- [ ] `Serialize`/`Deserialize` on Transform, MeshRenderer, Camera and Spinner (Spinner moves into the engine)
-- [ ] Asset references in MeshRenderer: a primitive name (`"Cube"`) or an asset path, plus the
+- [x] JSON reading and writing (`Core/Json`), with no exceptions; errors give a line and a reason
+- [x] A component registry: type name → factory, like Unity's `[Serializable]` + `AddComponent(Type)`
+- [x] `Serialize`/`Deserialize` on Transform, MeshRenderer, Camera and Spinner (Spinner moves into the engine)
+- [x] Asset references in MeshRenderer: a primitive name (`"Cube"`) or an asset path, plus the
       material's color and texture, so a saved scene can find its meshes again
-- [ ] GameObject names, active flags and the parent/child tree saved and restored
-- [ ] `Scene::Save(path)` / `Scene::Load(path)`
-- [ ] More primitives: Sphere and Cylinder next to Cube and Plane
-- [ ] *You should see:* the Sandbox's demo scene saved to a file, then loaded back to look
+- [x] GameObject names, active flags and the parent/child tree saved and restored
+- [x] `Scene::Save(path)` / `Scene::Load(path)`
+- [x] More primitives: Sphere and Cylinder next to Cube and Plane
+- [x] *You should see:* the Sandbox's demo scene saved to a file, then loaded back to look
       identical (`--demo --save` / `--load`)
+
+Done on 2026-10-04 (see [`milestones/M13.md`](milestones/M13.md)). Also in M13: `Viva::Assets`
+(every asset by name), material Tiling/Offset, and Lane Runner's planes tiled through materials.
 
 ## M14: Projects and the Project Manager
 

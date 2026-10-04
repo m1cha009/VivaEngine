@@ -8,6 +8,7 @@ add_library(VivaEngine STATIC
     src/Core/Application.cpp
     src/Core/Assert.cpp
     src/Core/ImageFile.cpp
+    src/Core/Json.cpp
     src/Core/Log.cpp
     src/Core/Primitives.cpp
     src/Core/Time.cpp
@@ -35,11 +36,16 @@ add_library(VivaEngine STATIC
     src/Renderer/VulkanContext.cpp
     src/Renderer/VulkanHelpers.cpp
     src/Renderer/VulkanVersion.cpp
+    src/Scene/Assets.cpp
     src/Scene/Camera.cpp
     src/Scene/Component.cpp
+    src/Scene/ComponentRegistry.cpp
+    src/Scene/FieldVisitor.cpp
     src/Scene/GameObject.cpp
     src/Scene/Model.cpp
     src/Scene/Scene.cpp
+    src/Scene/SceneFile.cpp
+    src/Scene/Spinner.cpp
     src/Scene/Transform.cpp)
 
 # include/ is the public API that games see. src/ is private to the engine.

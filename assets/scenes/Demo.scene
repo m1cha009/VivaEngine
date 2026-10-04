@@ -1,0 +1,873 @@
+{
+  "Format": "VivaEngine Scene",
+  "Version": 1,
+  "GameObjects": [
+    {
+      "Name": "Floor",
+      "Active": true,
+      "Transform": {
+        "Position": [0, 0, 0],
+        "Rotation": [0, 0, 0, 1],
+        "Scale": [2.8, 1, 2.8]
+      },
+      "Components": [
+        {
+          "Type": "MeshRenderer",
+          "Parts": [
+            {
+              "Mesh": "Primitives::Plane",
+              "Material": {
+                "Texture": "textures/checker.png",
+                "Color": [1, 1, 1, 1],
+                "Tiling": [14, 14],
+                "Offset": [0, 0]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Pillar ring",
+      "Active": true,
+      "Transform": {
+        "Position": [0, 0, 0],
+        "Rotation": [0, 0, 0, 1],
+        "Scale": [1, 1, 1]
+      },
+      "Components": [
+        {
+          "Type": "Spinner",
+          "Axis": [0, 1, 0],
+          "DegreesPerSecond": 6
+        }
+      ],
+      "Children": [
+        {
+          "Name": "Pillar 1",
+          "Active": true,
+          "Transform": {
+            "Position": [5.543277, 1.5, 2.2961006],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.9, 0.2, 0.2, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [5.543277, 3.3, 2.2961006],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 2",
+          "Active": true,
+          "Transform": {
+            "Position": [2.2961006, 1.5, 5.543277],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.95, 0.55, 0.15, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [2.2961006, 3.3, 5.543277],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 3",
+          "Active": true,
+          "Transform": {
+            "Position": [-2.296101, 1.5, 5.543277],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.95, 0.85, 0.2, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [-2.296101, 3.3, 5.543277],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 4",
+          "Active": true,
+          "Transform": {
+            "Position": [-5.5432777, 1.5, 2.2960997],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.3, 0.85, 0.3, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [-5.5432777, 3.3, 2.2960997],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 5",
+          "Active": true,
+          "Transform": {
+            "Position": [-5.543277, 1.5, -2.2961006],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.2, 0.8, 0.8, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [-5.543277, 3.3, -2.2961006],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 6",
+          "Active": true,
+          "Transform": {
+            "Position": [-2.2960987, 1.5, -5.543278],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.25, 0.4, 0.95, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [-2.2960987, 3.3, -5.543278],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 7",
+          "Active": true,
+          "Transform": {
+            "Position": [2.2961016, 1.5, -5.543277],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.55, 0.3, 0.9, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [2.2961016, 3.3, -5.543277],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pillar 8",
+          "Active": true,
+          "Transform": {
+            "Position": [5.5432773, 1.5, -2.2961006],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 3, 0.6]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": null,
+                    "Color": [0.8, 0.3, 0.8, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "BoxTextured",
+          "Active": true,
+          "Transform": {
+            "Position": [5.5432773, 3.3, -2.2961006],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.6, 0.6, 0.6]
+          },
+          "Children": [
+            {
+              "Name": "Node 0",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [-0.70710677, 0, 0, 0.70710677],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Mesh",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/BoxTextured/BoxTextured.gltf#mesh0/0",
+                          "Material": {
+                            "Texture": "models/BoxTextured/CesiumLogoFlat.png",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Crate",
+      "Active": true,
+      "Transform": {
+        "Position": [0, 1.5, 0],
+        "Rotation": [0, 0, 0, 1],
+        "Scale": [1.2, 1.2, 1.2]
+      },
+      "Components": [
+        {
+          "Type": "MeshRenderer",
+          "Parts": [
+            {
+              "Mesh": "Primitives::Cube",
+              "Material": {
+                "Texture": "textures/crate.png",
+                "Color": [1, 1, 1, 1],
+                "Tiling": [1, 1],
+                "Offset": [0, 0]
+              }
+            }
+          ]
+        },
+        {
+          "Type": "Spinner",
+          "Axis": [0.4, 1, 0.2],
+          "DegreesPerSecond": 46
+        }
+      ],
+      "Children": [
+        {
+          "Name": "Small crate",
+          "Active": true,
+          "Transform": {
+            "Position": [1.5, 0, 0],
+            "Rotation": [0, 0, 0, 1],
+            "Scale": [0.3, 0.3, 0.3]
+          },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [
+                {
+                  "Mesh": "Primitives::Cube",
+                  "Material": {
+                    "Texture": "textures/crate.png",
+                    "Color": [1, 1, 1, 1],
+                    "Tiling": [1, 1],
+                    "Offset": [0, 0]
+                  }
+                }
+              ]
+            },
+            {
+              "Type": "Spinner",
+              "Axis": [0, 1, 0],
+              "DegreesPerSecond": 180
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Truck pivot",
+      "Active": true,
+      "Transform": {
+        "Position": [0, 0, 0],
+        "Rotation": [0, 0, 0, 1],
+        "Scale": [1, 1, 1]
+      },
+      "Components": [
+        {
+          "Type": "Spinner",
+          "Axis": [0, 1, 0],
+          "DegreesPerSecond": 18.093403
+        }
+      ],
+      "Children": [
+        {
+          "Name": "CesiumMilkTruck",
+          "Active": true,
+          "Transform": {
+            "Position": [9.5, 0, 0],
+            "Rotation": [0, 1, 0, -4.371139e-08],
+            "Scale": [1, 1, 1]
+          },
+          "Components": [
+            {
+              "Type": "TruckWheels",
+              "Speed": 3
+            }
+          ],
+          "Children": [
+            {
+              "Name": "Yup2Zup",
+              "Active": true,
+              "Transform": {
+                "Position": [0, 0, 0],
+                "Rotation": [0.49999997, -0.5, 0.5, 0.49999997],
+                "Scale": [1, 1, 1]
+              },
+              "Children": [
+                {
+                  "Name": "Cesium_Milk_Truck",
+                  "Active": true,
+                  "Transform": {
+                    "Position": [0, 0, 0],
+                    "Rotation": [0, 0, 0, 1],
+                    "Scale": [1, 1, 1]
+                  },
+                  "Components": [
+                    {
+                      "Type": "MeshRenderer",
+                      "Parts": [
+                        {
+                          "Mesh": "models/CesiumMilkTruck.glb#mesh1/0",
+                          "Material": {
+                            "Texture": "models/CesiumMilkTruck.glb#image0",
+                            "Color": [1, 1, 1, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        },
+                        {
+                          "Mesh": "models/CesiumMilkTruck.glb#mesh1/1",
+                          "Material": {
+                            "Texture": null,
+                            "Color": [0, 0.0405063, 0.0212407, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        },
+                        {
+                          "Mesh": "models/CesiumMilkTruck.glb#mesh1/2",
+                          "Material": {
+                            "Texture": null,
+                            "Color": [0.064, 0.064, 0.064, 1],
+                            "Tiling": [1, 1],
+                            "Offset": [0, 0]
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "Children": [
+                    {
+                      "Name": "Node",
+                      "Active": true,
+                      "Transform": {
+                        "Position": [1.43267, 0, -0.427722],
+                        "Rotation": [0, 0, 0, 1],
+                        "Scale": [1, 1, 1]
+                      },
+                      "Children": [
+                        {
+                          "Name": "Wheels",
+                          "Active": true,
+                          "Transform": {
+                            "Position": [0, 0, 0],
+                            "Rotation": [0, 0.08848589, 0, -0.9960774],
+                            "Scale": [1, 1, 1]
+                          },
+                          "Components": [
+                            {
+                              "Type": "MeshRenderer",
+                              "Parts": [
+                                {
+                                  "Mesh": "models/CesiumMilkTruck.glb#mesh0/0",
+                                  "Material": {
+                                    "Texture": "models/CesiumMilkTruck.glb#image0",
+                                    "Color": [1, 1, 1, 1],
+                                    "Tiling": [1, 1],
+                                    "Offset": [0, 0]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Name": "Node.001",
+                      "Active": true,
+                      "Transform": {
+                        "Position": [-1.35233, 0, -0.427722],
+                        "Rotation": [0, 0, 0, 1],
+                        "Scale": [1, 1, 1]
+                      },
+                      "Children": [
+                        {
+                          "Name": "Wheels.001",
+                          "Active": true,
+                          "Transform": {
+                            "Position": [0, 0, 0],
+                            "Rotation": [0, 0.08848589, 0, -0.9960774],
+                            "Scale": [1, 1, 1]
+                          },
+                          "Components": [
+                            {
+                              "Type": "MeshRenderer",
+                              "Parts": [
+                                {
+                                  "Mesh": "models/CesiumMilkTruck.glb#mesh0/0",
+                                  "Material": {
+                                    "Texture": "models/CesiumMilkTruck.glb#image0",
+                                    "Color": [1, 1, 1, 1],
+                                    "Tiling": [1, 1],
+                                    "Offset": [0, 0]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Camera",
+      "Active": true,
+      "Transform": {
+        "Position": [0, 5.5, 15],
+        "Rotation": [-6.837968e-09, 0.98768836, -0.15643448, -4.317323e-08],
+        "Scale": [1, 1, 1]
+      },
+      "Components": [
+        {
+          "Type": "Camera",
+          "FieldOfView": 1.0471976,
+          "NearPlane": 0.1,
+          "FarPlane": 500,
+          "BackgroundColor": [0.02, 0.025, 0.04]
+        },
+        {
+          "Type": "FlyCamera",
+          "MoveSpeed": 5,
+          "LookSensitivity": 0.003
+        }
+      ]
+    }
+  ]
+}

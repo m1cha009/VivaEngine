@@ -3,6 +3,7 @@
 #include "Viva/MeshData.h"
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
@@ -31,6 +32,15 @@ struct MaterialSettings {
     std::shared_ptr<Viva::Texture> Texture;
     // Multiplies the texture's color (and the vertex colors), like a Unity material's Color.
     glm::vec4 Color { 1.0f };
+    // How often the texture repeats across the mesh, and how far it's shifted: a Unity material's
+    // Tiling and Offset. A texture coordinate becomes UV * Tiling + Offset.
+    glm::vec2 Tiling { 1.0f };
+    glm::vec2 Offset { 0.0f };
+
+    // Two settings are equal when every field is: the same texture (the same object, not just
+    // the same pixels), color, tiling and offset. "= default" has the compiler compare each field
+    // in turn (C++20).
+    bool operator==(const MaterialSettings&) const = default;
 };
 
 // Numbers about the last frame the renderer drew, for a stats display (see Renderer::GetStats).
@@ -62,19 +72,29 @@ public:
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    // Resources. Each returns nullptr (after logging why) if it fails. Creating a mesh or a
-    // texture copies its data to the GPU and waits for that to finish, so create them while
-    // loading (OnStart), then reuse them, rather than creating them every frame.
-
-    std::shared_ptr<Mesh> CreateMesh(const MeshData& data);
-    // Loads a PNG or JPEG from the assets folder, for example "textures/crate.png". Loading the
-    // same name again, while the texture is still in use, returns the same texture.
-    std::shared_ptr<Texture> LoadTexture(const std::string& assetName);
+    // Resources made from data in memory. Each returns nullptr (after logging why) if it fails.
+    // Creating a mesh or a texture copies its data to the GPU and waits for that to finish, so
+    // create them while loading (OnStart), then reuse them, rather than creating them every frame.
+    // Assets made from files (image files, models, the built-in primitives) come from Assets
+    // instead (see Viva/Assets.h), which creates them through these.
+    //
+    // assetName: the name the mesh or texture is known by in asset files, which a scene file
+    // writes to refer to it. Assets gives its meshes and textures their names. Leave it empty for
+    // those a game makes in code: like a Unity mesh made in a script, a scene file can't refer to
+    // one, so a MeshRenderer that uses it is saved without it.
+    std::shared_ptr<Mesh> CreateMesh(const MeshData& data, std::string assetName = {});
     // A texture from pixels in memory: width x height pixels of 4 bytes (red, green, blue, alpha),
     // row after row from the top-left corner. Like a Unity Texture2D filled with SetPixels32.
-    // Model::Load uses it for images stored inside model files.
-    std::shared_ptr<Texture> CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels);
+    std::shared_ptr<Texture> CreateTexture(uint32_t width, uint32_t height, std::span<const uint8_t> pixels,
+                                           std::string assetName = {});
     std::shared_ptr<Material> CreateMaterial(const MaterialSettings& settings);
+
+    // What a resource was made from, for writing it into a file: a mesh's or a texture's asset
+    // name ("" if it was made in code), and a material's settings. Static: they only read the
+    // resource, not the renderer.
+    static const std::string& GetAssetName(const Mesh& mesh);
+    static const std::string& GetAssetName(const Texture& texture);
+    static const MaterialSettings& GetSettings(const Material& material);
 
     // Queues `mesh`, drawn with `material` and placed in the world by `transform` (its model
     // matrix), for the frame being built. Like Unity's Graphics.DrawMesh: it lasts one frame, so

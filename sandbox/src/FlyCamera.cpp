@@ -1,5 +1,6 @@
 #include "FlyCamera.h"
 
+#include "Viva/FieldVisitor.h"
 #include "Viva/Input.h"
 #include "Viva/Transform.h"
 
@@ -18,6 +19,12 @@ namespace {
 constexpr float kMaxPitch = glm::radians(89.0f);
 
 } // namespace
+
+void FlyCamera::VisitFields(FieldVisitor& fields)
+{
+    fields.Field("MoveSpeed", MoveSpeed);
+    fields.Field("LookSensitivity", LookSensitivity);
+}
 
 void FlyCamera::OnUpdate(float dt)
 {

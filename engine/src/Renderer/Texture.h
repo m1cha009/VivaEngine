@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
+#include <utility>
 
 namespace Viva {
 
@@ -24,16 +26,21 @@ public:
     static std::unique_ptr<Texture> Create(const VulkanContext& context, uint32_t width, uint32_t height,
                                            std::span<const uint8_t> pixels);
 
-    explicit Texture(VkDevice device); // creates nothing: use Load() or Create()
+    explicit Texture(VkDevice device); // creates nothing: use Create()
     ~Texture() override;
 
     VkImageView GetView() const { return m_Image->GetView(); }
     VkSampler GetSampler() const { return m_Sampler; }
 
+    // See Renderer::CreateTexture.
+    const std::string& GetAssetName() const { return m_AssetName; }
+    void SetAssetName(std::string name) { m_AssetName = std::move(name); }
+
 private:
     VkDevice m_Device = VK_NULL_HANDLE;
     std::unique_ptr<Image> m_Image;
     VkSampler m_Sampler = VK_NULL_HANDLE;
+    std::string m_AssetName;
 };
 
 } // namespace Viva

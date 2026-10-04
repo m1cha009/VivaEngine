@@ -9,6 +9,7 @@
 
 namespace Viva {
 
+class FieldVisitor;
 class GameObject;
 
 // Where a GameObject is, how it's turned and how big it is, relative to its parent: Unity's
@@ -73,6 +74,10 @@ public:
     Transform* Find(std::string_view path) const;
 
     GameObject& GetGameObject() const { return *m_GameObject; }
+
+    // The local position, rotation and scale, for scene files (see Component::VisitFields). The
+    // parent isn't a field: a scene file nests children inside their parent instead.
+    void VisitFields(FieldVisitor& fields);
 
 private:
     // Only a GameObject creates its Transform (see GameObject's members).

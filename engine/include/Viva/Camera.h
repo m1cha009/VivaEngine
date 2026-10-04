@@ -32,6 +32,8 @@ public:
     // Camera.projectionMatrix it follows OpenGL's convention, with y pointing up; the renderer
     // converts it for Vulkan. aspect: the image's width divided by its height.
     glm::mat4 ProjectionMatrix(float aspect) const;
+
+    void VisitFields(FieldVisitor& fields) override;
 };
 
 } // namespace Viva

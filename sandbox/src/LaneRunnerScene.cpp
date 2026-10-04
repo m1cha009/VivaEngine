@@ -6,6 +6,7 @@
 #include "Treadmill.h"
 #include "TruckController.h"
 
+#include "Viva/Assets.h"
 #include "Viva/Camera.h"
 #include "Viva/Log.h"
 #include "Viva/MeshRenderer.h"
@@ -111,16 +112,29 @@ Pixels GrassTexture(std::mt19937& random)
     return grass;
 }
 
-std::shared_ptr<Material> TexturedMaterial(Renderer& renderer, const Pixels& pixels)
+// tiling: how often the texture repeats across the plane it's on (see MaterialSettings).
+std::shared_ptr<Material> TexturedMaterial(Renderer& renderer, const Pixels& pixels, const glm::vec2& tiling)
 {
-    return renderer.CreateMaterial({ .Texture = renderer.CreateTexture(pixels.Width, pixels.Height, pixels.Bytes) });
+    return renderer.CreateMaterial({
+        .Texture = renderer.CreateTexture(pixels.Width, pixels.Height, pixels.Bytes),
+        .Tiling = tiling,
+    });
+}
+
+// The built-in plane, scaled to `width` x `length` meters.
+glm::vec3 PlaneScale(float width, float length)
+{
+    return { width / Primitives::kPlaneSize, 1.0f, length / Primitives::kPlaneSize };
 }
 
 } // namespace
 
-void LoadLaneRunnerScene(Scene& scene, Renderer& renderer)
+void LoadLaneRunnerScene(Scene& scene, Assets& assets)
 {
-    std::unique_ptr<Model> truckModel = Model::Load(renderer, "models/CesiumMilkTruck.glb");
+    // The road and the grass are made in code, so they're created through the renderer itself;
+    // what comes from files comes from Assets.
+    Renderer& renderer = assets.GetRenderer();
+    const std::shared_ptr<Model> truckModel = assets.GetModel("models/CesiumMilkTruck.glb");
     if (!truckModel) {
         Log::Error("The Lane Runner can't start without the milk truck model");
         return;
@@ -136,25 +150,25 @@ void LoadLaneRunnerScene(Scene& scene, Renderer& renderer)
     // across it, and every kDashPeriod meters along it.
     GameObject& road = scene.CreateGameObject("Road");
     road.GetTransform().LocalPosition.z = kRoadLength / 2.0f - kRoadBehind;
-    road.AddComponent<MeshRenderer>(
-        renderer.CreateMesh(Primitives::Plane(Road::kWidth, kRoadLength, { 1.0f, kRoadLength / kDashPeriod })),
-        TexturedMaterial(renderer, RoadTexture(random)));
+    road.GetTransform().LocalScale = PlaneScale(Road::kWidth, kRoadLength);
+    road.AddComponent<MeshRenderer>(assets.GetMesh("Primitives::Plane"),
+                                    TexturedMaterial(renderer, RoadTexture(random), { 1.0f, kRoadLength / kDashPeriod }));
     road.AddComponent<Treadmill>(truckTransform, kDashPeriod);
 
     // The grass, a little below the road so that the road wins the depth test where they overlap.
     GameObject& grass = scene.CreateGameObject("Grass");
     grass.GetTransform().LocalPosition.y = -0.05f;
-    grass.AddComponent<MeshRenderer>(
-        renderer.CreateMesh(Primitives::Plane(kGroundSize, kGroundSize, glm::vec2(kGroundSize / kGrassPeriod))),
-        TexturedMaterial(renderer, GrassTexture(random)));
+    grass.GetTransform().LocalScale = PlaneScale(kGroundSize, kGroundSize);
+    grass.AddComponent<MeshRenderer>(assets.GetMesh("Primitives::Plane"),
+                                     TexturedMaterial(renderer, GrassTexture(random), glm::vec2(kGroundSize / kGrassPeriod)));
     grass.AddComponent<Treadmill>(truckTransform, kGrassPeriod);
 
     // The game's rules, with what they place on the road. The HUD's font is ImGui's built-in one
     // in its scalable version, which stays sharp at large sizes (the debug UI keeps the default).
     GameObject& game = scene.CreateGameObject("Lane Runner");
-    game.AddComponent<LaneRunner>(truckController, renderer.CreateMesh(Primitives::Cube()),
-                                  renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") }),
-                                  Model::Load(renderer, "models/BoxTextured/BoxTextured.gltf"),
+    game.AddComponent<LaneRunner>(truckController, assets.GetMesh("Primitives::Cube"),
+                                  assets.GetMaterial({ .Texture = assets.GetTexture("textures/crate.png") }),
+                                  assets.GetModel("models/BoxTextured/BoxTextured.gltf"),
                                   ImGui::GetIO().Fonts->AddFontDefaultVector());
 
     // The camera, following the truck.

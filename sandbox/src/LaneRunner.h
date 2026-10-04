@@ -27,7 +27,7 @@ public:
     // The crate's mesh and material and the logo box model are kept, to place as many as needed.
     // hudFont: the large font for the score (see LaneRunnerScene.cpp).
     LaneRunner(TruckController& truck, std::shared_ptr<Viva::Mesh> crateMesh,
-               std::shared_ptr<Viva::Material> crateMaterial, std::unique_ptr<Viva::Model> pickupModel,
+               std::shared_ptr<Viva::Material> crateMaterial, std::shared_ptr<Viva::Model> pickupModel,
                ImFont* hudFont);
 
 protected:
@@ -56,7 +56,7 @@ private:
     TruckController& m_Truck;
     std::shared_ptr<Viva::Mesh> m_CrateMesh;
     std::shared_ptr<Viva::Material> m_CrateMaterial;
-    std::unique_ptr<Viva::Model> m_PickupModel; // null if the model didn't load: no pickups then
+    std::shared_ptr<Viva::Model> m_PickupModel; // null if the model didn't load: no pickups then
     ImFont* m_HudFont;
 
     std::vector<RoadItem> m_Items;

@@ -5,7 +5,6 @@
 #include "DebugWindows.h"
 
 #include "FlyCamera.h"
-#include "Spinner.h"
 #include "TruckWheels.h"
 
 #include "Viva/Camera.h"
@@ -14,6 +13,7 @@
 #include "Viva/MeshRenderer.h"
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
+#include "Viva/Spinner.h"
 
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/euler_angles.hpp>

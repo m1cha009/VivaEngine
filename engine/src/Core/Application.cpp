@@ -4,6 +4,7 @@
 #include "Platform/SDLVersion.h"
 #include "Platform/Window.h"
 #include "Renderer/VulkanVersion.h"
+#include "Viva/Assets.h"
 #include "Viva/Log.h"
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
@@ -36,8 +37,9 @@ Application::Application(ApplicationSettings settings)
 // Defined here, not in the header: destroying the unique_ptrs needs the full definitions of
 // Window and Renderer, which only this file includes.
 //
-// This is where the renderer and the window are destroyed: members go in reverse order of
-// declaration, the renderer (all of Vulkan) first, then the window and SDL. (The scene is gone
+// This is where the assets, the renderer and the window are destroyed: members go in reverse order
+// of declaration, the assets (the models they keep) first, then the renderer (all of Vulkan), then
+// the window and SDL. (The scene is gone
 // already: Run destroys it last thing.) It runs after the game's own destructor, so the GPU
 // resources a game keeps in its own members have been released by then too.
 Application::~Application() = default;
@@ -54,6 +56,7 @@ int Application::Run()
     m_Renderer = Renderer::Create(*m_Window, m_Settings.VSync);
     if (!m_Renderer)
         return EXIT_FAILURE;
+    m_Assets = std::make_unique<Assets>(*m_Renderer);
 
     m_Scene = std::make_unique<Scene>();
     OnStart();

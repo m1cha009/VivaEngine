@@ -10,11 +10,13 @@ layout(set = 0, binding = 0) uniform Camera {
     mat4 Projection;
 } camera;
 
-// Per draw, pushed right before each draw call: the object's model matrix and its material's
-// color (ObjectPushConstants in engine/src/Renderer/Renderer.cpp).
+// Per draw, pushed right before each draw call: the object's model matrix, and its material's
+// color and texture tiling (xy) and offset (zw) (ObjectPushConstants in
+// engine/src/Renderer/Renderer.cpp).
 layout(push_constant) uniform Object {
     mat4 Model;
     vec4 Color;
+    vec4 TilingOffset;
 } object;
 
 // Per vertex, from the vertex buffer: these inputs match kVertexAttributes in
@@ -36,5 +38,7 @@ void main()
     gl_Position = camera.Projection * (camera.View * (object.Model * vec4(inPosition, 1.0)));
     // The material's color tints the vertex color; the fragment shader multiplies in the texture.
     outColor = inColor * object.Color.rgb;
-    outUV = inUV;
+    // Tiling 2 shows the texture twice across the mesh: the UVs run 0..2 instead of 0..1, and the
+    // sampler repeats the texture past 1 (M7).
+    outUV = inUV * object.TilingOffset.xy + object.TilingOffset.zw;
 }

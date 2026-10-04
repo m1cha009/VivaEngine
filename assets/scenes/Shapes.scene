@@ -1,0 +1,75 @@
+{
+  "Format": "VivaEngine Scene",
+  "Version": 1,
+  "GameObjects": [
+    {
+      "Name": "Camera",
+      "Transform": { "Position": [0, 2.2, 6.5], "Rotation": [0, 0.98768836, -0.15643448, 0] },
+      "Components": [
+        { "Type": "Camera", "BackgroundColor": [0.05, 0.08, 0.12] },
+        { "Type": "FlyCamera" }
+      ]
+    },
+    {
+      "Name": "Floor",
+      "Components": [
+        {
+          "Type": "MeshRenderer",
+          "Parts": [
+            { "Mesh": "Primitives::Plane", "Material": { "Texture": "textures/checker.png", "Tiling": [5, 5] } }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Sphere",
+      "Transform": { "Position": [-3, 1, 0], "Scale": [1.6, 1.6, 1.6] },
+      "Components": [
+        {
+          "Type": "MeshRenderer",
+          "Parts": [
+            { "Mesh": "Primitives::Sphere", "Material": { "Texture": "textures/crate.png", "Tiling": [4, 2] } }
+          ]
+        },
+        { "Type": "Spinner", "DegreesPerSecond": 30 }
+      ]
+    },
+    {
+      "Name": "Cylinder",
+      "Transform": { "Position": [0, 1, 0] },
+      "Components": [
+        {
+          "Type": "MeshRenderer",
+          "Parts": [
+            { "Mesh": "Primitives::Cylinder", "Material": { "Texture": "models/BoxTextured/CesiumLogoFlat.png" } }
+          ]
+        },
+        { "Type": "Spinner", "DegreesPerSecond": -45 }
+      ]
+    },
+    {
+      "Name": "Cube",
+      "Transform": { "Position": [3, 0.5, 0] },
+      "Components": [
+        {
+          "Type": "MeshRenderer",
+          "Parts": [
+            { "Mesh": "Primitives::Cube", "Material": { "Texture": "textures/crate.png", "Color": [1, 0.6, 0.6, 1] } }
+          ]
+        }
+      ],
+      "Children": [
+        {
+          "Name": "Small sphere",
+          "Transform": { "Position": [0, 0.8, 0], "Scale": [0.5, 0.5, 0.5] },
+          "Components": [
+            {
+              "Type": "MeshRenderer",
+              "Parts": [ { "Mesh": "Primitives::Sphere", "Material": { "Color": [0.3, 0.85, 0.3, 1] } } ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

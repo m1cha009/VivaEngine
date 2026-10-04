@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
 
 namespace Viva {
 
@@ -44,10 +46,15 @@ public:
     // Three per triangle.
     uint32_t GetIndexCount() const { return m_IndexCount; }
 
+    // See Renderer::CreateMesh.
+    const std::string& GetAssetName() const { return m_AssetName; }
+    void SetAssetName(std::string name) { m_AssetName = std::move(name); }
+
 private:
     std::unique_ptr<Buffer> m_VertexBuffer;
     std::unique_ptr<Buffer> m_IndexBuffer;
     uint32_t m_IndexCount = 0;
+    std::string m_AssetName;
 };
 
 } // namespace Viva

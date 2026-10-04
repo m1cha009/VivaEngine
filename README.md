@@ -13,7 +13,8 @@ engines work. It runs on Windows.
 The Sandbox is a small game made with the engine ([M12](docs/milestones/M12.md)): drive a milk truck
 down an endless three-lane road, dodge the crates and collect the logo boxes while the speed rises.
 Space starts, A/D or the arrow keys change lanes, F1 shows the debug windows, Esc quits.
-`Sandbox --demo` shows the engine's demo scene (M10, M11) instead.
+`Sandbox --demo` shows the engine's demo scene (M10, M11) instead, and `Sandbox --load <file>` a
+scene saved to a file ([M13](docs/milestones/M13.md)); `assets/scenes/` has two examples.
 
 ## Prerequisites
 

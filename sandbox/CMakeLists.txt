@@ -8,7 +8,6 @@ add_executable(Sandbox
     src/LaneRunner.cpp
     src/LaneRunnerScene.cpp
     src/Main.cpp
-    src/Spinner.cpp
     src/Treadmill.cpp
     src/TruckController.cpp
     src/TruckWheels.cpp)
@@ -25,16 +24,19 @@ viva_set_warnings(Sandbox)
 # engine/CMakeLists.txt), and the renderer doesn't load game shaders yet.
 viva_compile_shaders(Sandbox)
 
-# The game's assets, copied next to the executable (see cmake/Assets.cmake). DemoScene loads
-# the textures with Renderer::LoadTexture and the models with Model::Load. A .gltf model's .bin
-# and image files are listed too: the .gltf only refers to them. CREDITS.md travels with the
-# models, because their license asks for credit wherever they go.
+# The game's assets, copied next to the executable (see cmake/Assets.cmake). The scenes load
+# them by name through Viva::Assets. A .gltf model's .bin and image files are listed too: the
+# .gltf only refers to them. CREDITS.md travels with the models, because their license asks for
+# credit wherever they go. The scene files (M13) are examples for --load: Demo.scene is the demo
+# scene as --demo --save writes it, and Shapes.scene is written by hand.
 viva_copy_assets(Sandbox
     models/BoxTextured/BoxTextured.gltf
     models/BoxTextured/BoxTextured0.bin
     models/BoxTextured/CesiumLogoFlat.png
     models/CesiumMilkTruck.glb
     models/CREDITS.md
+    scenes/Demo.scene
+    scenes/Shapes.scene
     textures/checker.png
     textures/crate.png)
 

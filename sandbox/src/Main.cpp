@@ -3,16 +3,21 @@
 
 #include "DebugWindows.h"
 #include "DemoScene.h"
+#include "FlyCamera.h"
 #include "LaneRunnerScene.h"
+#include "TruckWheels.h"
 
 #include "Viva/Application.h"
 #include "Viva/Assert.h"
+#include "Viva/ComponentRegistry.h"
 #include "Viva/Input.h"
 #include "Viva/Log.h"
+#include "Viva/Scene.h"
 #include "Viva/Time.h"
 
 #include <cstdint>
 #include <cstdlib>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -24,43 +29,63 @@ using namespace Viva;
 constexpr const char* kTitle = "VivaEngine Lane Runner";
 constexpr const char* kDemoTitle = "VivaEngine Sandbox";
 
+// What the sandbox shows, and what it does with scene files (see main for the options).
+struct SandboxOptions {
+    float QuitAfter = 0.0f; // seconds until it quits by itself, or 0 to run until Esc or the window closes
+    bool Demo = false;      // the engine's demo scene (M10, M11) instead of the Lane Runner game
+    std::string LoadPath;   // a scene file to show instead of either
+    std::string SavePath;   // where to save the scene once it's built
+};
+
+constexpr const char* kFlyHelp = "Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to "
+                                 "look around. F1 shows or hides the debug windows. Esc quits.";
+
 // The game itself. It derives from Application and overrides the parts it needs, the way a
 // MonoBehaviour overrides Start and Update. The scene's objects bring their own behavior as
 // components (TruckController, FollowCamera, LaneRunner...); this class handles what concerns
 // the whole program.
 class SandboxApp : public Application {
 public:
-    // quitAfter: seconds until the app quits by itself, or 0 to run until Esc or the window closes.
-    // demo: show the engine's demo scene (M10, M11) instead of the Lane Runner game.
-    SandboxApp(ApplicationSettings settings, float quitAfter, bool demo)
+    SandboxApp(ApplicationSettings settings, SandboxOptions options)
         : Application(std::move(settings))
-        , m_QuitAfter(quitAfter)
-        , m_Demo(demo)
+        , m_Options(std::move(options))
     {
     }
 
 protected:
     void OnStart() override
     {
-        if (m_Demo) {
-            LoadDemoScene(GetScene(), GetRenderer());
-            Log::Info("Fly with W/A/S/D, Q/E for down/up, Shift for speed; hold the right mouse button to look "
-                      "around. F1 shows or hides the debug windows. Esc quits.");
-            return;
+        // The sandbox's own components that scenes use, so scene files can hold them (M13). The
+        // engine's own (MeshRenderer, Camera, Spinner) are registered already. The Lane Runner's
+        // components aren't: that game is built in code, and its road and grass are made in code
+        // too, which scene files can't refer to.
+        ComponentRegistry::Register<FlyCamera>("FlyCamera");
+        ComponentRegistry::Register<TruckWheels>("TruckWheels");
+
+        if (!m_Options.LoadPath.empty()) {
+            GetScene().Load(m_Options.LoadPath, GetAssets());
+            Log::Info(kFlyHelp);
+        } else if (m_Options.Demo) {
+            LoadDemoScene(GetScene(), GetAssets());
+            Log::Info(kFlyHelp);
+        } else {
+            LoadLaneRunnerScene(GetScene(), GetAssets());
+            // The game has its own HUD; the debug windows wait for F1.
+            m_DebugWindows.SetVisible(false);
+            Log::Info("Lane Runner: Space drives, A/D or the arrow keys change lanes. F1 shows or hides the debug "
+                      "windows. Esc quits.");
         }
 
-        LoadLaneRunnerScene(GetScene(), GetRenderer());
-        // The game has its own HUD; the debug windows wait for F1.
-        m_DebugWindows.SetVisible(false);
-        Log::Info("Lane Runner: Space drives, A/D or the arrow keys change lanes. F1 shows or hides the debug "
-                  "windows. Esc quits.");
+        // Saved before anything has run, so the file holds the scene as it was built.
+        if (!m_Options.SavePath.empty())
+            GetScene().Save(m_Options.SavePath);
     }
 
     void OnUpdate(float dt) override
     {
         m_DebugWindows.Draw(dt, GetRenderer(), GetScene());
 
-        const bool timeIsUp = m_QuitAfter > 0.0f && Time::SinceStart() >= m_QuitAfter;
+        const bool timeIsUp = m_Options.QuitAfter > 0.0f && Time::SinceStart() >= m_Options.QuitAfter;
         if (Input::GetKeyDown(Key::Escape) || timeIsUp)
             Quit();
     }
@@ -77,8 +102,7 @@ protected:
 
 private:
     DebugWindows m_DebugWindows;
-    float m_QuitAfter = 0.0f;
-    bool m_Demo = false;
+    SandboxOptions m_Options;
 };
 
 } // namespace
@@ -91,28 +115,33 @@ int main(int argc, char* argv[])
     //   --no-vsync           draw as fast as possible instead of waiting for the display
     //   --display <n>        open the window on monitor n (0 is usually the main one)
     //   --demo               show the engine's demo scene instead of the game
+    //   --load <file>        show the scene saved in that file instead (M13)
+    //   --save <file>        save the scene into that file once it's built (M13)
     ApplicationSettings settings { .Title = kTitle };
+    SandboxOptions options;
     bool testAssert = false;
-    bool demo = false;
-    float quitAfter = 0.0f;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg = argv[i];
         if (arg == "--test-assert")
             testAssert = true;
         else if (arg == "--quit-after" && i + 1 < argc)
-            quitAfter = std::strtof(argv[++i], nullptr);
+            options.QuitAfter = std::strtof(argv[++i], nullptr);
         else if (arg == "--no-vsync")
             settings.VSync = false;
         else if (arg == "--display" && i + 1 < argc)
             settings.Display = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
         else if (arg == "--demo")
-            demo = true;
+            options.Demo = true;
+        else if (arg == "--load" && i + 1 < argc)
+            options.LoadPath = argv[++i];
+        else if (arg == "--save" && i + 1 < argc)
+            options.SavePath = argv[++i];
     }
-    if (demo)
+    if (options.Demo || !options.LoadPath.empty())
         settings.Title = kDemoTitle;
     VIVA_ASSERT(!testAssert, "failing on purpose because of --test-assert");
 
-    // std::move hands the settings over instead of copying them: "settings" isn't used again.
-    SandboxApp app(std::move(settings), quitAfter, demo);
+    // std::move hands the settings over instead of copying them: they aren't used again here.
+    SandboxApp app(std::move(settings), std::move(options));
     return app.Run();
 }

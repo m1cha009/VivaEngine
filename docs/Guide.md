@@ -1,6 +1,6 @@
 # Using VivaEngine
 
-How to build, run and make things with the engine, as of M12. The milestone docs in
+How to build, run and make things with the engine, as of M13. The milestone docs in
 [`milestones/`](milestones/) explain *why* things work the way they do; this page is the
 practical summary.
 
@@ -34,8 +34,8 @@ scripts\build.cmd windows-debug
 build\windows-debug\bin\Sandbox.exe
 ```
 
-- **Options:** `--demo` (the demo scene), `--no-vsync`, `--display 1` (second monitor),
-  `--quit-after 5`.
+- **Options:** `--demo` (the demo scene), `--load <file>` (a scene file), `--save <file>` (save the
+  scene once it's built), `--no-vsync`, `--display 1` (second monitor), `--quit-after 5`.
 - **A release folder you can share:** `scripts\package.cmd MyBuild` puts it in `dist\MyBuild\`.
 - **Debug builds** run the Vulkan validation layer; its errors show up in the log.
 - **F1** shows the Stats window and the Scene window (hierarchy and inspector).
@@ -50,11 +50,10 @@ experiment is to add your own scene next to the existing two (`DemoScene.cpp`,
 **1. Write a scene function**, for example `sandbox/src/MyScene.cpp`:
 
 ```cpp
+#include "Viva/Assets.h"
 #include "Viva/Camera.h"
 #include "Viva/MeshRenderer.h"
 #include "Viva/Model.h"
-#include "Viva/Primitives.h"
-#include "Viva/Renderer.h"
 #include "Viva/Scene.h"
 
 #include <glm/gtc/quaternion.hpp>
@@ -71,18 +70,18 @@ protected:
     }
 };
 
-void LoadMyScene(Scene& scene, Renderer& renderer)
+void LoadMyScene(Scene& scene, Assets& assets)
 {
-    // GPU resources: create once while loading, then share them between objects.
-    auto cube = renderer.CreateMesh(Primitives::Cube());
-    auto crateMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") });
+    // Assets by name: each is loaded once and shared between the objects that use it.
+    auto cube = assets.GetMesh("Primitives::Cube");
+    auto crateMaterial = assets.GetMaterial({ .Texture = assets.GetTexture("textures/crate.png") });
 
     GameObject& crate = scene.CreateGameObject("Crate");
     crate.AddComponent<MeshRenderer>(cube, crateMaterial);
     crate.AddComponent<Spin>();
 
-    // A glTF model: load once, then Instantiate as often as you like (a prefab).
-    std::unique_ptr<Model> truck = Model::Load(renderer, "models/CesiumMilkTruck.glb");
+    // A glTF model: loaded once, then Instantiate as often as you like (a prefab).
+    std::shared_ptr<Model> truck = assets.GetModel("models/CesiumMilkTruck.glb");
     GameObject& truckObject = truck->Instantiate(scene);
     truckObject.GetTransform().LocalPosition = { 4, 0, 0 };
 
@@ -97,13 +96,20 @@ void LoadMyScene(Scene& scene, Renderer& renderer)
 **2. Add it to the build:** list `src/MyScene.cpp` in `add_executable(Sandbox ...)` in
 `sandbox/CMakeLists.txt`.
 
-**3. Call it:** in `SandboxApp::OnStart` (`Main.cpp`), call `LoadMyScene(GetScene(), GetRenderer());`
+**3. Call it:** in `SandboxApp::OnStart` (`Main.cpp`), call `LoadMyScene(GetScene(), GetAssets());`
 instead of `LoadLaneRunnerScene`, or behind a new command-line flag like `--demo`.
 
+**Or write a scene file** instead of code: see `assets/scenes/Shapes.scene`, and run
+`Sandbox --load` with it. `Sandbox --save my.scene` saves whatever scene was built, so a scene made
+in code can be turned into a file. To be saved, a component type must be registered
+(`ComponentRegistry::Register<Spin>("Spin")` in `OnStart`) and list its fields in `VisitFields`;
+meshes and textures must come from `Assets`. See [M13](milestones/M13.md).
+
 **Assets:** put files under `assets/` and list them in `viva_copy_assets(...)` in
-`sandbox/CMakeLists.txt`. Load them by their path inside `assets/`, such as `"textures/crate.png"`
-or `"models/x.glb"`. PNG/JPEG textures and `.gltf`/`.glb` models work. Credits for third-party
-assets go in a `CREDITS.md` next to them.
+`sandbox/CMakeLists.txt`. Load them through `GetAssets()` by their path inside `assets/`, such as
+`"textures/crate.png"` or `"models/x.glb"`. PNG/JPEG textures and `.gltf`/`.glb` models work. The
+built-in meshes are `"Primitives::Cube"`, `"Primitives::Plane"` (10 × 10), `"Primitives::Sphere"`
+and `"Primitives::Cylinder"`. Credits for third-party assets go in a `CREDITS.md` next to them.
 
 **Debug UI:** call ImGui anywhere in `OnUpdate`:
 `ImGui::Begin("Tuning"); ImGui::SliderFloat("Speed", &m_Speed, 0, 10); ImGui::End();`
@@ -118,9 +124,11 @@ assets go in a `CREDITS.md` next to them.
 | `AddComponent<T>()` / `GetComponent<T>()` | the same; `AddComponent` passes constructor arguments, and `GetComponent` returns a pointer (`nullptr` if absent) |
 | `transform.localPosition`, `localRotation`, `localScale` | `GetTransform().LocalPosition` / `LocalRotation` (a `glm::quat`) / `LocalScale` |
 | `transform.position`, `forward`, `rotation`, `LookAt`, `Find` | `GetPosition()`, `Forward()`, `GetRotation()`, `LookAt()`, `Find("a/b")` |
-| `Instantiate(prefab)` | `model->Instantiate(scene, parent)` |
-| `Resources.Load<Texture2D>` / `new Texture2D` + `SetPixels32` | `renderer.LoadTexture(...)` / `renderer.CreateTexture(w, h, pixels)` |
-| `new Material` / `MeshFilter` + `MeshRenderer` | `renderer.CreateMaterial({ .Texture, .Color })` / `MeshRenderer(mesh, material)` |
+| `Instantiate(prefab)` | `assets.GetModel("models/x.glb")->Instantiate(scene, parent)` |
+| `Resources.Load<Texture2D>` / `new Texture2D` + `SetPixels32` | `assets.GetTexture(...)` / `renderer.CreateTexture(w, h, pixels)` |
+| `GameObject.CreatePrimitive(PrimitiveType.Cube)` | `assets.GetMesh("Primitives::Cube")` in a `MeshRenderer` |
+| `new Material` / Tiling, Offset / `MeshFilter` + `MeshRenderer` | `assets.GetMaterial({ .Texture, .Color, .Tiling, .Offset })` / `MeshRenderer(mesh, material)` |
+| `[SerializeField]` fields / `EditorSceneManager.SaveScene` / `LoadScene(…, Additive)` | `VisitFields` + `ComponentRegistry::Register<T>` / `scene.Save(path)` / `scene.Load(path, assets)` |
 | `Camera.main`, `backgroundColor`, `fieldOfView` | `scene.GetMainCamera()`, `Camera::BackgroundColor`, `FieldOfView` (radians) |
 | `Input.GetKeyDown(KeyCode.Space)` | `Input::GetKeyDown(Key::Space)`; also `GetMouseButton`, `MouseDelta()`, `SetCursorLocked()` |
 | `Time.deltaTime` / `Debug.Log` / `Debug.Assert` | `Time::DeltaTime()` / `Log::Info("x = {}", x)` / `VIVA_ASSERT(cond)` |
@@ -144,16 +152,18 @@ assets go in a `CREDITS.md` next to them.
 
 - No lighting or shadows: everything is unlit, opaque texture × color.
 - No physics (collisions are your own box tests), audio, animation or skinning.
-- No saved scenes and no editor.
+- No editor yet: scenes are built in code or written as files by hand (M14–M18 add projects and
+  the editor; see [`EditorRoadmap.md`](EditorRoadmap.md)).
 - One built-in shader (Unlit); games can't add their own yet.
 - Mirrored (negative scale) objects draw inside out.
 
-These are the "Beyond M12" options in [`CLAUDE.md`](../CLAUDE.md).
+The rest are the "Beyond M18" options in [`CLAUDE.md`](../CLAUDE.md).
 
 ## Where to read more
 
 - **Each milestone explained**, with Unity comparisons: [`milestones/M0.md`](milestones/M0.md) to
-  [`M12.md`](milestones/M12.md). M8 (renderer), M10 (scene) and M11 (models) matter most for using
-  the engine.
-- **Two complete examples:** `sandbox/src/DemoScene.cpp` and `sandbox/src/LaneRunnerScene.cpp`.
+  [`M13.md`](milestones/M13.md). M8 (renderer), M10 (scene), M11 (models) and M13 (assets, scene
+  files) matter most for using the engine.
+- **Complete examples:** `sandbox/src/DemoScene.cpp` and `sandbox/src/LaneRunnerScene.cpp` in code,
+  `assets/scenes/Shapes.scene` and `Demo.scene` as files.
 - **Every public header** in `engine/include/Viva/` is commented for exactly this use.

@@ -9,7 +9,7 @@ namespace Viva {
 
 std::unique_ptr<Material> Material::Create(VkDevice device, DescriptorAllocator& descriptors,
                                            VkDescriptorSetLayout layout, std::shared_ptr<Shader> shader,
-                                           std::shared_ptr<Texture> texture, const glm::vec4& color)
+                                           std::shared_ptr<Texture> texture, const MaterialSettings& settings)
 {
     auto material = std::make_unique<Material>(descriptors);
     material->m_Descriptor = descriptors.Allocate(layout);
@@ -18,7 +18,7 @@ std::unique_ptr<Material> Material::Create(VkDevice device, DescriptorAllocator&
                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     material->m_Shader = std::move(shader);
     material->m_Texture = std::move(texture);
-    material->m_Color = color;
+    material->m_Settings = settings;
     return material;
 }
 

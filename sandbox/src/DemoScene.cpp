@@ -1,85 +1,82 @@
 #include "DemoScene.h"
 
 #include "FlyCamera.h"
-#include "Spinner.h"
 #include "TruckWheels.h"
 
+#include "Viva/Assets.h"
 #include "Viva/Camera.h"
 #include "Viva/MeshRenderer.h"
 #include "Viva/Model.h"
 #include "Viva/Primitives.h"
-#include "Viva/Renderer.h"
 #include "Viva/Scene.h"
+#include "Viva/Spinner.h"
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <cmath>
 #include <format>
+#include <iterator>
 
 using namespace Viva;
 
 namespace {
 
-constexpr int kPillarCount = 8;
 constexpr float kPillarRingRadius = 6.0f;
 constexpr float kPillarHeight = 3.0f;
+
+// One pillar per color, around the ring. (Until M13, each pillar's faces had these colors, through
+// a mesh with its own vertex colors. A mesh made in code can't be saved in a scene file, so now
+// each pillar is a plain cube with a colored material.)
+constexpr glm::vec4 kPillarColors[] = {
+    { 0.90f, 0.20f, 0.20f, 1.0f }, // red
+    { 0.95f, 0.55f, 0.15f, 1.0f }, // orange
+    { 0.95f, 0.85f, 0.20f, 1.0f }, // yellow
+    { 0.30f, 0.85f, 0.30f, 1.0f }, // green
+    { 0.20f, 0.80f, 0.80f, 1.0f }, // cyan
+    { 0.25f, 0.40f, 0.95f, 1.0f }, // blue
+    { 0.55f, 0.30f, 0.90f, 1.0f }, // violet
+    { 0.80f, 0.30f, 0.80f, 1.0f }, // magenta
+};
 
 // The milk truck drives in a circle around the pillars, in meters and seconds.
 constexpr float kTruckSpeed = 3.0f;
 constexpr float kTruckCircleRadius = 9.5f;
 
-// A cube whose six faces have their own colors: the built-in cube, with its vertex colors
-// changed. Its faces come in the order +X, -X, +Y, -Y, +Z, -Z, four vertices each.
-MeshData ColoredCube()
-{
-    constexpr glm::vec3 kFaceColors[] = {
-        { 0.90f, 0.20f, 0.20f }, // +X red
-        { 0.20f, 0.80f, 0.80f }, // -X cyan
-        { 0.30f, 0.85f, 0.30f }, // +Y green
-        { 0.80f, 0.30f, 0.80f }, // -Y magenta
-        { 0.25f, 0.40f, 0.95f }, // +Z blue
-        { 0.95f, 0.85f, 0.20f }, // -Z yellow
-    };
-    MeshData cube = Primitives::Cube();
-    for (size_t i = 0; i < cube.Vertices.size(); ++i)
-        cube.Vertices[i].Color = kFaceColors[i / 4];
-    return cube;
-}
+// The floor: the built-in plane, scaled up to this size, with the checker texture (2x2 squares)
+// repeated so that each square is one unit.
+constexpr float kFloorSize = 28.0f;
 
 } // namespace
 
-void LoadDemoScene(Scene& scene, Renderer& renderer)
+void LoadDemoScene(Scene& scene, Assets& assets)
 {
-    // Meshes and materials, as in M8. They're shared_ptrs, so several MeshRenderers can use one,
-    // and each lives as long as something uses it. If a texture fails to load (the log says why),
-    // LoadTexture returns null and that material is plain white.
-    const std::shared_ptr<Mesh> cubeMesh = renderer.CreateMesh(Primitives::Cube());
-    const std::shared_ptr<Mesh> pillarMesh = renderer.CreateMesh(ColoredCube());
-    // 28 x 28 units, with the checker texture (2x2 squares) repeated 14 times along each side:
-    // one square per unit.
-    const std::shared_ptr<Mesh> floorMesh = renderer.CreateMesh(Primitives::Plane(28.0f, 28.0f, glm::vec2(14.0f)));
-    const std::shared_ptr<Material> crateMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/crate.png") });
-    const std::shared_ptr<Material> floorMaterial = renderer.CreateMaterial({ .Texture = renderer.LoadTexture("textures/checker.png") });
-    const std::shared_ptr<Material> pillarMaterial = renderer.CreateMaterial({});
+    // Meshes, textures and materials come from Assets by name, so each is loaded once and
+    // shared: every crate uses the same cube mesh and crate material. If a texture fails to load
+    // (the log says why), GetTexture returns null and that material is plain white.
+    const std::shared_ptr<Mesh> cubeMesh = assets.GetMesh("Primitives::Cube");
+    const std::shared_ptr<Material> crateMaterial = assets.GetMaterial({ .Texture = assets.GetTexture("textures/crate.png") });
 
     // Models (M11) are loaded once, then placed in the scene with Instantiate, as often as needed:
-    // every instance shares the model's meshes, materials and textures. Load returns null if a
+    // every instance shares the model's meshes, materials and textures. GetModel returns null if a
     // file is missing or broken (the log says why), and the scene does without that model.
-    // These unique_ptrs let go of the models at the end of this function; the instances keep the
-    // meshes and materials they use alive.
-    const std::unique_ptr<Model> logoBox = Model::Load(renderer, "models/BoxTextured/BoxTextured.gltf");
-    const std::unique_ptr<Model> truck = Model::Load(renderer, "models/CesiumMilkTruck.glb");
+    const std::shared_ptr<Model> logoBox = assets.GetModel("models/BoxTextured/BoxTextured.gltf");
+    const std::shared_ptr<Model> truck = assets.GetModel("models/CesiumMilkTruck.glb");
 
     GameObject& floor = scene.CreateGameObject("Floor");
-    floor.AddComponent<MeshRenderer>(floorMesh, floorMaterial);
+    floor.GetTransform().LocalScale = glm::vec3(kFloorSize / Primitives::kPlaneSize, 1.0f, kFloorSize / Primitives::kPlaneSize);
+    floor.AddComponent<MeshRenderer>(
+        assets.GetMesh("Primitives::Plane"),
+        assets.GetMaterial({ .Texture = assets.GetTexture("textures/checker.png"), .Tiling = glm::vec2(kFloorSize / 2.0f) }));
 
     // The pillars are children of one object that turns slowly: they ride along, each keeping its
     // place in the ring, without any code of their own. The ring starts turned by half a step, so
     // no pillar stands between the starting camera and the crate.
     GameObject& ring = scene.CreateGameObject("Pillar ring");
     ring.AddComponent<Spinner>(glm::vec3(0.0f, 1.0f, 0.0f), 6.0f);
-    for (int i = 0; i < kPillarCount; ++i) {
+    // std::size gives an array's length, so the ring has as many pillars as there are colors.
+    constexpr size_t kPillarCount = std::size(kPillarColors);
+    for (size_t i = 0; i < kPillarCount; ++i) {
         const float angle = glm::two_pi<float>() * (static_cast<float>(i) + 0.5f) / static_cast<float>(kPillarCount);
         const float x = kPillarRingRadius * std::cos(angle);
         const float z = kPillarRingRadius * std::sin(angle);
@@ -88,7 +85,7 @@ void LoadDemoScene(Scene& scene, Renderer& renderer)
         Transform& transform = pillar.GetTransform();
         transform.LocalPosition = { x, kPillarHeight / 2.0f, z };
         transform.LocalScale = { 0.6f, kPillarHeight, 0.6f }; // a cube stretched tall
-        pillar.AddComponent<MeshRenderer>(pillarMesh, pillarMaterial);
+        pillar.AddComponent<MeshRenderer>(cubeMesh, assets.GetMaterial({ .Color = kPillarColors[i] }));
 
         // A logo box on top of each pillar: eight instances of one model. It's the ring's child,
         // not the pillar's, because the pillar's stretched scale would stretch it too.

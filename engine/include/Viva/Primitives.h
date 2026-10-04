@@ -12,9 +12,22 @@ namespace Viva::Primitives {
 // stored once per face because each face gives it different texture coordinates.
 MeshData Cube();
 
-// A flat rectangle on the ground (y = 0): `width` units along X by `length` along Z, centered on
-// the origin and facing up. The texture repeats textureRepeats.x times across (along X) and
-// textureRepeats.y times along Z.
-MeshData Plane(float width, float length, const glm::vec2& textureRepeats = glm::vec2(1.0f));
+// The built-in plane's size: 10 x 10 units, like Unity's.
+inline constexpr float kPlaneSize = 10.0f;
+
+// A flat square on the ground (y = 0), kPlaneSize units along X and Z, centered on the origin and
+// facing up, with the whole texture across it once. Scale its Transform for other sizes, and set
+// the material's Tiling to repeat the texture.
+MeshData Plane();
+
+// A ball 1 unit across (radius 0.5) around the origin, like Unity's sphere: rings of vertices from
+// the top (+Y) to the bottom, each going around the Y axis. The texture wraps around it once, its
+// top row at the top of the sphere, as a world map wraps a globe.
+MeshData Sphere();
+
+// A cylinder 1 unit across and 2 tall (y from -1 to 1) around the Y axis, like Unity's: its side,
+// with the texture wrapped around once, and a flat disc closing each end, with the texture laid
+// across it.
+MeshData Cylinder();
 
 } // namespace Viva::Primitives
