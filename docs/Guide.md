@@ -9,7 +9,7 @@ practical summary.
 VivaEngine is a small C++20 / Vulkan 1.3 game engine that works the way Unity does. You build a
 world from **GameObjects with components**, write behavior as components with
 `OnStart`/`OnUpdate`, and the engine handles the window, input, timing and drawing. It runs on
-Windows (tested) and is kept Mac-ready (CI builds and runs it on macOS).
+Windows.
 
 A game only ever includes `Viva/...` headers, plus GLM for math and `imgui.h` for debug UI. SDL3
 and Vulkan stay hidden inside the engine.
@@ -33,8 +33,6 @@ then Run. Add `--demo` under the run configuration's Program arguments for the d
 scripts\build.cmd windows-debug
 build\windows-debug\bin\Sandbox.exe
 ```
-
-macOS: see the [README](../README.md).
 
 - **Options:** `--demo` (the demo scene), `--no-vsync`, `--display 1` (second monitor),
   `--quit-after 5`.

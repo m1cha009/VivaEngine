@@ -1,14 +1,12 @@
 # VivaEngine
 
-[![macOS build](https://github.com/m1cha009/VivaEngine/actions/workflows/macos.yml/badge.svg)](https://github.com/m1cha009/VivaEngine/actions/workflows/macos.yml)
-
 A small game engine in C++20 and Vulkan 1.3, built one milestone at a time to learn how game
-engines work.
+engines work. It runs on Windows.
 
 - [`CLAUDE.md`](CLAUDE.md): the project brief, roadmap, status and decision log
 - [`docs/Guide.md`](docs/Guide.md): how to use the engine (build, run, make a scene, Unity cheat sheet)
 - [`docs/milestones/`](docs/milestones/): one explainer per milestone (start with [`M0.md`](docs/milestones/M0.md)). Each describes the code as of its milestone's commit (`git log --oneline` lists them; `git checkout <commit>` to follow along exactly).
-- [`docs/MacChecklist.md`](docs/MacChecklist.md): things to verify when building on macOS
+- [`docs/EditorRoadmap.md`](docs/EditorRoadmap.md): the plan for projects and the editor (M13–M18)
 
 ## Lane Runner
 
@@ -19,13 +17,13 @@ Space starts, A/D or the arrow keys change lanes, F1 shows the debug windows, Es
 
 ## Prerequisites
 
-| | Windows | macOS |
-|---|---|---|
-| Compiler | Visual Studio Build Tools 2026 with the **Desktop development with C++** workload (MSVC) | Xcode or the Xcode Command Line Tools (Apple Clang) |
-| CMake | 3.25 or newer | 3.25 or newer (`brew install cmake`, or the copy bundled with CLion) |
-| Ninja | `winget install Ninja-build.Ninja` (CLion also bundles one) | `brew install ninja` |
-| Vulkan SDK | [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home); the installer sets `VULKAN_SDK` | LunarG Vulkan SDK with **System Global Installation** checked ([see below](#vulkan-sdk)) |
-| Git | any recent version | any recent version |
+| | |
+|---|---|
+| Compiler | Visual Studio Build Tools 2026 with the **Desktop development with C++** workload (MSVC) |
+| CMake | 3.25 or newer |
+| Ninja | `winget install Ninja-build.Ninja` (CLion also bundles one) |
+| Vulkan SDK | [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home); the installer sets `VULKAN_SDK` |
+| Git | any recent version |
 
 You don't install the libraries by hand (SDL3, GLM, VMA, stb_image, Dear ImGui and cgltf). CMake
 downloads pinned versions of them the first time you configure a preset, so that first configure
@@ -69,60 +67,15 @@ cmake --preset windows-debug
 cmake --build --preset windows-debug
 ```
 
-## macOS
-
-### Vulkan SDK
-
-macOS has no Vulkan of its own. The LunarG SDK provides both the Vulkan loader and a driver that
-translates Vulkan calls to Metal: MoltenVK, or KosmicKrisp on macOS 26 and later. In the
-installer, check **System Global Installation**. That copies the headers, libraries and tools
-into `/usr/local`, where CMake finds them without any setup.
-
-If you skipped the global install, configuring fails with `Could NOT find Vulkan`. Fix it by
-sourcing the SDK's environment script from your shell profile. Terminals pick it up, and so does
-CLion, which reads your login shell's environment when it starts:
-
-```bash
-echo 'source ~/VulkanSDK/<version>/setup-env.sh' >> ~/.zshrc
-```
-
-Then restart the terminal and CLion, and configure again.
-
-### CLion
-
-Open the folder and enable the `macos-debug` profile (Settings → Build, Execution, Deployment →
-CMake). The default toolchain, Apple Clang, is the right one. Select **Sandbox** and Run.
-
-### Command line
-
-```bash
-cmake --preset macos-debug
-cmake --build --preset macos-debug
-./build/macos-debug/bin/Sandbox
-```
-
-## Continuous integration (macOS)
-
-Every push to `main` triggers [`.github/workflows/macos.yml`](.github/workflows/macos.yml) on a
-GitHub-hosted Apple Silicon Mac. It installs the Vulkan SDK, builds `macos-debug` and
-`macos-release` with Apple Clang, fails on any warning in our code, and runs the Sandbox. Results
-show up in the repository's **Actions** tab, as the badge at the top of this README, and as a green
-check or red cross next to each commit. GitHub emails you when a run fails. You can also start a
-run by hand: Actions → macOS build → **Run workflow**.
-
-It costs nothing, because the repository is public and the workflow uses a standard runner
-(`macos-latest`). Don't change it to a `-large` or `-xlarge` runner: those are always billed.
-
 ## Troubleshooting
 
-- **`The CMAKE_CXX_COMPILER: cl is not a full path and was not found in the PATH`** (Windows).
+- **`The CMAKE_CXX_COMPILER: cl is not a full path and was not found in the PATH`**.
   CMake ran outside the MSVC developer environment. Use `scripts\build.cmd` or the Native Tools
   prompt; in CLion, check the toolchain (step 1 above). Delete the half-configured
   `build\<preset>` folder before trying again.
-- **`Could NOT find Vulkan`** (Windows). `VULKAN_SDK` isn't set in the process running CMake.
+- **`Could NOT find Vulkan`**. `VULKAN_SDK` isn't set in the process running CMake.
   Programs that were already open when the SDK was installed (terminals, CLion) keep their old
   environment. Restart them.
-- **`Could NOT find Vulkan`** (macOS). See [Vulkan SDK](#vulkan-sdk) above.
 - **The first configure is slow.** CMake is downloading the libraries (about 26 MB, most of it SDL3) into
   `build/<preset>/_deps/`, and the first build compiles SDL3. Every preset has its own copy, so this happens once
   per preset.
@@ -137,5 +90,4 @@ It costs nothing, because the repository is public and the workflow uses a stand
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
 | `assets/` | Game assets: textures (from `scripts/make-textures.ps1`) and glTF models (credits in `assets/models/CREDITS.md`) |
 | `scripts/` | `build.cmd` and `package.cmd` (Windows builds), `make-textures.ps1` |
-| `.github/workflows/` | The macOS CI build |
-| `docs/` | Milestone explainers and the macOS checklist |
+| `docs/` | The usage guide, milestone explainers and the editor roadmap |

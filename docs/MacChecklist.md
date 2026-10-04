@@ -1,4 +1,8 @@
-# macOS checklist
+# macOS checklist (archived)
+
+> **Archived on 2026-10-04.** Michail dropped macOS: Windows is the only platform, and the macOS CI
+> workflow was deleted. This list is kept as it stood after M12, in case Mac support ever comes
+> back. Nothing new is added to it.
 
 Things to verify when VivaEngine is first built and run on the Mac (M1 Pro, Apple Silicon). That
 happens after the last milestone. Every milestone that adds platform-sensitive code appends its

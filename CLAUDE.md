@@ -4,7 +4,7 @@
 
 - **Michail**: an experienced Unity/C# game developer with a game shipped on Steam. He has **not written C++ in years**.
 - **Goal: learn how a game engine works by building one.** Understanding matters more than speed or features.
-- **Michail writes no code. You write all of it.** He reviews after each milestone, builds and runs it in CLion, tests on Windows and Mac, and asks questions.
+- **Michail writes no code. You write all of it.** He reviews after each milestone, builds and runs it in CLion on Windows, and asks questions.
 - So the code and explanations must teach:
   - When a C++ idiom or Vulkan concept appears for the first time, explain it briefly in comments and in the milestone doc.
   - Compare to C#/Unity where it helps. For example:
@@ -19,8 +19,8 @@
 |---|---|
 | Language | C++20 |
 | Build | CMake ≥ 3.25 with `CMakePresets.json`; dependencies via `FetchContent` |
-| Compilers | MSVC on Windows, Apple Clang on macOS |
-| IDE (Michail's) | CLion on both platforms; the project must open cleanly through the presets |
+| Compiler | MSVC on Windows |
+| IDE (Michail's) | CLion; the project must open cleanly through the presets |
 | Platform layer | **SDL3**, pinned to tag `release-3.4.18`, built as a **static** library (`SDL_STATIC ON`, `SDL_SHARED OFF`) |
 | Graphics | **Vulkan, plain C API** (`vulkan.h`), loader and headers from the LunarG Vulkan SDK via `find_package(Vulkan REQUIRED COMPONENTS glslc)` |
 | Vulkan version | Target **Vulkan 1.3 core**: dynamic rendering and synchronization2. **No `VkRenderPass` or `VkFramebuffer`.** |
@@ -32,6 +32,7 @@
 **Approved for later milestones** (add each only when its milestone arrives):
 - Dear ImGui (SDL3 + Vulkan backends): added in M9
 - cgltf: added in M11
+- Dear ImGui's docking build (`v1.92.9b-docking`, replacing the plain release): approved 2026-10-04 for M15
 
 **Anything else needs Michail's approval first.**
 
@@ -43,25 +44,13 @@
 
 ## Platforms
 
-- **Windows x64** with an NVIDIA RTX 3080 Ti. This is the main dev machine and the **only platform tested for now**. The toolchain is MSVC from Visual Studio Build Tools (no VS IDE), with CMake, Ninja, Git, the Vulkan SDK, CLion and RenderDoc installed and verified.
-- **macOS on an M1 Pro** (Apple Silicon). This is a **future target**. Michail won't test on the Mac until **all milestones are completed**, so:
-  - All code must stay Mac-ready, following the rules below, and the macOS presets must exist.
-  - Never block a milestone on Mac verification.
-  - Keep a running list of things to check on the Mac in `docs/MacChecklist.md`, adding to it whenever a milestone adds platform-sensitive code (surface, swapchain, portability, Retina sizing, file paths).
-  - The GitHub Actions workflow `.github/workflows/macos.yml` builds Debug and Release with Apple Clang and runs the Sandbox on every push to `main`. It's the early warning for Mac problems, so keep it green: a milestone that breaks it isn't done. It must stay free: only standard runners (`macos-latest`), never `-large`/`-xlarge` labels, and no artifacts or caches.
+- **Windows x64** with an NVIDIA RTX 3080 Ti. This is the dev machine and the **only platform**. The toolchain is MSVC from Visual Studio Build Tools (no VS IDE), with CMake, Ninja, Git, the Vulkan SDK, CLion and RenderDoc installed and verified.
+- **macOS is dropped** (Michail's decision, 2026-10-04). Don't spend time on Mac builds:
+  - New code doesn't have to be Mac-ready, and nothing is added to `docs/MacChecklist.md`, which is archived.
+  - There is no macOS CI any more (the workflow was deleted).
+  - The Mac code that already exists (portability extensions, `SDL_WINDOW_HIGH_PIXEL_DENSITY` and pixel-size swapchains, the `macos-*` presets, the Clang warning flags) stays as long as it costs nothing. Remove it if it ever gets in the way, rather than maintaining it.
 
-### Vulkan on macOS requirements
-
-- Vulkan runs through a translation driver from the LunarG SDK. Code must work with both:
-  - **MoltenVK**
-  - **KosmicKrisp** (Vulkan 1.4 conformant, requires macOS 26+)
-- **Instance:** if `VK_KHR_portability_enumeration` is available, enable it and set `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR`.
-- **Device:** if `VK_KHR_portability_subset` appears in the device's extension list, it **must** be enabled.
-- **Retina:** create the window with `SDL_WINDOW_HIGH_PIXEL_DENSITY`, and size the swapchain from `SDL_GetWindowSizeInPixels`, never from the window size in points.
-- **Validation:** GPU-assisted validation and debug printf only work with KosmicKrisp, not MoltenVK. Don't rely on them.
-- **Finding the SDK:** if CMake can't find Vulkan on the Mac, the SDK probably wasn't installed with "System Global Installation" or `setup-env.sh` wasn't sourced. Explain the fix and document it in the README.
-
-**Isolation rules:**
+**Isolation rules** (kept for clean layering, not for porting):
 - Platform `#ifdef`s live only in `engine/src/Platform/`.
 - SDL headers are included only in `Platform/`.
 - Vulkan headers are included only in `Renderer/`.
@@ -70,9 +59,8 @@
 
 ```
 VivaEngine/
-├── .github/workflows/      # macos.yml: free macOS CI build on every push to main
 ├── CLAUDE.md
-├── README.md               # how to build/run on Windows and macOS
+├── README.md               # how to build and run on Windows
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── cmake/                  # helper scripts (dependencies, shader compilation)
@@ -84,11 +72,13 @@ VivaEngine/
 │       ├── Renderer/       # all Vulkan code
 │       └── Scene/          # Scene, GameObject, Component, Transform, Camera (since M10), Model (M11)
 ├── sandbox/                # executable target: test app / game using the engine
+├── editor/                 # executable target: VivaEditor, Project Manager + scene editor (since M14)
 ├── shaders/                # GLSL sources
 ├── assets/
 ├── scripts/                # build.cmd: Windows command-line build through vcvars64.bat
 └── docs/
     ├── Guide.md            # how to use the engine: build, run, make a scene, cheat sheet (keep it current)
+    ├── EditorRoadmap.md    # M13–M18 checklists: projects and the editor (tick items as they land)
     └── milestones/         # one explainer per milestone: M0.md, M1.md, ...
 ```
 
@@ -109,11 +99,10 @@ VivaEngine/
 - A `VK_CHECK(expr)` macro logs file, line and the `VkResult` name, then aborts in Debug.
 - No exceptions in engine code.
 - Logging goes through a small `Viva::Log` (levels: Trace/Info/Warn/Error) using `std::format`.
-  - Verify Apple Clang supports it; set `CMAKE_OSX_DEPLOYMENT_TARGET` as needed.
   - If `std::format` doesn't work there, fall back to `fmt` via FetchContent and record that in the decision log.
 
 **Build settings:**
-- Warnings: `/W4` on MSVC, `-Wall -Wextra` on Clang.
+- Warnings: `/W4` on MSVC.
 - Engine code builds warning-free; third-party code is excluded from these warning flags.
 - Debug builds enable validation layers and a debug messenger routed into `Viva::Log`. Release builds disable both.
 
@@ -135,9 +124,9 @@ VivaEngine/
      - a **reading guide**: the files in the order Michail should read them, with what to notice in each
      - **how to test**: what he should see, and things to try (resize, minimize, keys)
      - known limitations
-     - which platform it was verified on (Windows for now), with any new Mac checks also appended to `docs/MacChecklist.md`
+     - that it was verified on Windows
    - The **Status** section of `CLAUDE.md` is updated.
-   - There is **one git commit**, e.g. `M3: Swapchain and clear screen`. Push it to `origin/main` right away (Michail approved pushing each milestone on 2026-10-03), and check that its macOS CI run is green before committing the next milestone. Never force-push, and push nothing else unless Michail asks.
+   - There is **one git commit**, e.g. `M3: Swapchain and clear screen`. Push it to `origin/main` right away (Michail approved pushing each milestone on 2026-10-03). Never force-push, and push nothing else unless Michail asks.
    - A Release executable is packaged with `scripts\package.cmd Mx` into `dist/Mx/` (git-ignored). Add a short `README.txt` there: what to look at, and the controls.
 4. **Then** give Michail a short summary: what changed, what to read first, and how to run it (including the packaged executable).
 5. **Ask before:**
@@ -150,12 +139,12 @@ VivaEngine/
    - If Ninja can't find `cl.exe` from a plain shell, either provide a Visual Studio generator preset for command-line builds or run through `vcvars64.bat`.
    - Pick one approach, make sure CLion still works, and document it in the README and the decision log.
 
-## Toolchain check (first session, on whichever machine you're on)
+## Toolchain check (first session on a new machine)
 
 Run these and report the results:
 - `cmake --version` (needs ≥ 3.25)
 - `ninja --version`
-- the compiler version (`cl` / `clang --version`)
+- the compiler version (`cl`)
 - the `VULKAN_SDK` environment variable
 - `glslc --version`
 - `vulkaninfo --summary` (GPU, driver, supported Vulkan API version)
@@ -236,14 +225,21 @@ Run these and report the results:
 - Propose 2–3 small game ideas; Michail picks one. (Picked 2026-10-03: **lane runner**. Drive a truck down a 3-lane road, dodge obstacles and collect pickups while the speed rises; follow camera, score in ImGui.)
 - Build it in the sandbox, adding only the engine features it needs.
 
-**Beyond M12** (decide together): lighting and PBR, shadows, audio via SDL3, physics (Jolt), scene serialization, asset pipeline, shader hot reload, multithreaded rendering.
+**M13–M18: Projects and the editor** (planned 2026-10-04, at Michail's request). The full checklists are in `docs/EditorRoadmap.md`; tick items there as they land.
+- **M13: Scene serialization.** Hand-written JSON, a component registry, scene save/load, Sphere and Cylinder primitives.
+- **M14: Projects and the Project Manager.** Project folders (`.vivaproject`, `Assets/`, `Scenes/`), a recent-projects list, and the new `VivaEditor` executable that starts in a Project Manager: create, add existing, open, remove from list, delete from disk.
+- **M15: Editor shell.** The scene rendered to a texture inside a docking ImGui layout: Scene view, Hierarchy, Inspector, Project, Console; an editor camera; menu bar; unsaved-change prompts.
+- **M16: Placing and editing objects.** A GameObject menu for primitives, a full Inspector, Hierarchy editing, click-to-select (ray vs bounding box), grid, save/reopen.
+- **M17: Gizmos and undo.** Hand-written move/rotate/scale gizmos (W/E/R), snapping, undo/redo.
+- **M18: Play mode and builds.** Play/Pause/Stop with a scene snapshot, a `VivaPlayer` executable, File > Build.
+
+**Beyond M18** (decide together): a project's own C++ code (DLL + hot reload), asset GUIDs and `.meta` files, prefabs, lighting and PBR, shadows, audio via SDL3, physics (Jolt), asset pipeline, shader hot reload, multithreaded rendering.
 
 ## Status
 
-- **Current milestone:** none: all milestones are done, M0–M12 (M0–M8 on 2026-10-03, M9–M12 on 2026-10-04). Next: Michail's review, the Mac pass through `docs/MacChecklist.md`, and choosing what comes after M12 (see "Beyond M12").
-- **Verified on Windows:** M0–M12, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Clang diagnostics are checked locally with CLion's clang-tidy since M5. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
-- **CI (macOS):** green through M11. The runner exposes "Apple Paravirtual device" through MoltenVK 1.4.2 (Vulkan 1.3), so CI runs the real Vulkan code paths.
-- **Verified on macOS:** deferred until all milestones are completed (see `docs/MacChecklist.md`). The macOS CI workflow was added after M0; its first run happens on the next push to `main`.
+- **Current milestone:** none. M0–M12 are done (M0–M8 on 2026-10-03, M9–M12 on 2026-10-04). Next: M13 (scene serialization), the first of the editor milestones planned in `docs/EditorRoadmap.md`, once Michail says to start.
+- **Verified on Windows:** M0–M12, built and run from the command line (`scripts/build.cmd`) in Debug and Release with zero warnings. Windows were driven by an automated script on the second monitor (keys, mouse clicks, minimize, resize, maximize, close), with screenshots via PrintWindow. Validation, including synchronization validation since M3, was silent. Michail checked mouse look by hand on the M8 build (2026-10-04): it works as intended. Not yet verified in CLion.
+- **macOS:** dropped on 2026-10-04 and never tested on a real Mac. The macOS CI was green through M11 before it was deleted.
 - **Dev machine notes:** VS Build Tools 2026 (MSVC 14.51) is the compiler. VS Community 2026 (no C++ workload) and Build Tools 2019 (MSVC 14.29) are also installed, so CLion's toolchain must point at Build Tools 2026. Implicit Vulkan layers are installed (RTSS, Overwolf, Steam overlay). Keep an eye on them when validation output appears in M2.
 
 ## Decision log
@@ -572,3 +568,10 @@ Append one line per decision: date, decision, reason.
   - **`Scene::Contains`:** LaneRunner forgets items destroyed with the inspector, which it would otherwise read after they were freed; DebugWindows uses it for its selection. Destroying the truck or the camera that way still breaks the game (documented).
   - **Smaller:** one `Plane` (the two-float overload read like a rectangle but made a square); collision boxes derived from the item sizes, with pickups deliberately generous; `UpdateItems` flatter, and stopping after a crash; one `ResetRun`; HUD text as `string_view` (no allocations per frame); the window title from `ApplicationSettings`; `FollowCamera::OnStart` only places the camera; CI skips both modes when the runner has no GPU (`continue 2`).
   - **Efficiency review:** nothing measurable. Noted: ImGui uploads new glyphs through its backend's own staging buffer and `vkQueueWaitIdle` (a few one-off stalls at the start and at the first crash; the M9 deferral covers it), and `GetPosition` builds a whole world matrix (fine at this scale).
+- 2026-10-04: Projects and the editor planned as M13–M18 (`docs/EditorRoadmap.md`), at Michail's request: create, list, open and delete projects, and place primitives in a scene by hand. Michail's choices:
+  - **Projects are data only at first:** a folder with a `.vivaproject` file, `Assets/` and `Scenes/`, built from the engine's components. A project's own C++ code (a DLL with hot reload) comes after M18.
+  - **One `VivaEditor` executable** (new `editor/` target) starts in the Project Manager; the recent-projects list lives in `SDL_GetPrefPath`. The Sandbox stays as the code-only example.
+  - **JSON is hand-written** (`Core/Json`, no exceptions), not nlohmann/json or yyjson.
+  - **ImGui switches to its docking build** (`v1.92.9b-docking`) in M15, for a Unity-like dockable layout.
+  - **Gizmos are hand-written** (M17), not ImGuizmo.
+- 2026-10-04: **macOS dropped** (Michail's decision): Windows is the only platform. New code needn't be Mac-ready, `.github/workflows/macos.yml` was deleted (with the README badge), and `docs/MacChecklist.md` is archived as it stood after M12. Existing Mac code and the `macos-*` presets stay while they cost nothing. Earlier decision-log entries and milestone docs that mention the Mac are left as history.
