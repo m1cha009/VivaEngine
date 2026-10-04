@@ -1,6 +1,7 @@
 #pragma once
 
 #include <format>
+#include <functional>
 #include <string_view>
 #include <utility>
 
@@ -71,6 +72,14 @@ public:
     {
         Message<Args...>(Level::Error, format, std::forward<Args>(args)...);
     }
+
+    // Something that wants every message too, like the editor's Console window. It gets the
+    // level, the seconds since the first message (as in the printed line), and the message without
+    // that prefix. There's one listener at a time; setting another replaces it, and nullptr removes
+    // it. It's called on the thread that logs (nearly always the main one) while other threads'
+    // messages wait, so it must be quick, and mustn't log itself.
+    using Listener = std::function<void(Level level, double seconds, std::string_view message)>;
+    static void SetListener(Listener listener);
 
 private:
     static void Write(Level level, std::string_view format, std::format_args args);

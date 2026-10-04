@@ -89,7 +89,7 @@ int Application::Run()
         // Input that arrived since the game's last update. (It's cleared after each update, not
         // here, so a key press that arrives during a pass that can't draw isn't lost.)
         m_Window->PollEvents();
-        if (m_Window->ShouldClose())
+        if (m_Window->TakeCloseRequest() && OnQuitRequested())
             m_QuitRequested = true;
         if (m_Settings.QuitAfter > 0.0f && Time::SinceStart() >= m_Settings.QuitAfter)
             m_QuitRequested = true;
@@ -125,7 +125,8 @@ int Application::Run()
         const float fixedDt = Time::FixedDeltaTime();
         while (fixedTimeAccumulator >= fixedDt) {
             Time::SetDeltaTime(fixedDt); // as in Unity, DeltaTime() inside OnFixedUpdate is the fixed step
-            m_Scene->FixedUpdate(fixedDt);
+            if (m_SceneUpdating)
+                m_Scene->FixedUpdate(fixedDt);
             OnFixedUpdate(fixedDt);
             fixedTimeAccumulator -= fixedDt;
         }
@@ -133,12 +134,14 @@ int Application::Run()
         // The scene's components update first (OnStart the first time, then OnUpdate, then
         // OnLateUpdate), then the game's own OnUpdate, which also builds its debug windows.
         Time::SetDeltaTime(dt);
-        m_Scene->Update(dt);
+        if (m_SceneUpdating)
+            m_Scene->Update(dt);
         OnUpdate(dt);
 
         // The scene removes what was destroyed this frame, then hands the renderer its main
         // camera and everything visible.
         m_Scene->Render(*m_Renderer);
+        OnRender();
 
         // The UI is complete: ImGui turns this frame's windows into lists of triangles, which
         // EndFrame draws over the scene.

@@ -82,17 +82,22 @@ location is remembered and names are suggested ("My Project 2"); `Application::S
 
 The editor's frame: the windows that Unity also has, without editing yet.
 
-- [ ] **Render to texture:** the scene is drawn into an offscreen color + depth image, which is
+- [x] **Render to texture:** the scene is drawn into an offscreen color + depth image, which is
       shown inside an ImGui window (`ImGui::Image`). This is also the M9 deferral's "offscreen
       image" for post-processing.
-- [ ] Editor windows: **Scene view**, **Hierarchy**, **Inspector**, **Project** (files in
+- [x] Editor windows: **Scene view**, **Hierarchy**, **Inspector**, **Project** (files in
       `Assets/`), **Console** (the `Viva::Log` output)
-- [ ] Docking window layout (ImGui's docking build), saved per project
-- [ ] Editor camera that isn't part of the scene: right mouse look + WASD (the Sandbox's
+- [x] Docking window layout (ImGui's docking build), saved per user rather than per project
+      (ImGui applies a saved layout only before its windows exist; Unity's layouts are per user too)
+- [x] Editor camera that isn't part of the scene: right mouse look + WASD (the Sandbox's
       FlyCamera moves into the editor), F to focus the selection
-- [ ] Menu bar: File (New Scene, Open Scene, Save, Save As, Close Project), Edit, GameObject, Window
-- [ ] Unsaved changes: `*` in the title, and a Save / Don't Save / Cancel prompt on close
-- [ ] *You should see:* an editor that looks like a small Unity, showing the scene and its hierarchy
+- [x] Menu bar: File (New Scene, Open Scene, Save, Save As, Close Project) and Window. Edit and
+      GameObject come with what fills them (M16, M17)
+- [x] Unsaved changes: `*` in the title, and a Save / Don't Save / Cancel prompt on close
+- [x] *You should see:* an editor that looks like a small Unity, showing the scene and its hierarchy
+
+Done on 2026-10-04 (see [`milestones/M15.md`](milestones/M15.md)). Also in M15: the Inspector edits
+every field through `FieldVisitor` (planned for M16) and Edit mode (`SetSceneUpdating`).
 
 ## M16: Placing and editing objects
 

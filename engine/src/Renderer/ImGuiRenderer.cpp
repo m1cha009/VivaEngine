@@ -108,4 +108,14 @@ uint32_t ImGuiRenderer::Record(VkCommandBuffer cmd)
     return drawCalls;
 }
 
+VkDescriptorSet ImGuiRenderer::AddTexture(VkImageView view)
+{
+    return ImGui_ImplVulkan_AddTexture(view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+void ImGuiRenderer::RemoveTexture(VkDescriptorSet texture)
+{
+    ImGui_ImplVulkan_RemoveTexture(texture);
+}
+
 } // namespace Viva

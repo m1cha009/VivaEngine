@@ -87,11 +87,13 @@ void Scene::Render(Renderer& renderer)
 {
     RemoveDestroyed();
 
-    const Camera* camera = GetMainCamera();
-    if (!camera)
-        return;
-    renderer.SetCamera(camera->ViewMatrix(), camera->ProjectionMatrix(renderer.GetAspectRatio()));
-    renderer.SetClearColor(camera->BackgroundColor);
+    // The main camera, if there is one, is where the frame is seen from. The meshes are submitted
+    // either way: without a camera a game shows nothing, but the editor's Scene view, which has a
+    // camera of its own (Application::OnRender), still shows them.
+    if (const Camera* camera = GetMainCamera()) {
+        renderer.SetCamera(camera->ViewMatrix(), camera->ProjectionMatrix(renderer.GetAspectRatio()));
+        renderer.SetClearColor(camera->BackgroundColor);
+    }
 
     for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects) {
         if (!gameObject->CanUpdate())

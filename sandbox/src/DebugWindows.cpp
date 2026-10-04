@@ -218,7 +218,7 @@ void DebugWindows::DrawInspector(GameObject& gameObject)
     }
     if (FlyCamera* flyCamera = gameObject.GetComponent<FlyCamera>()) {
         ImGui::SeparatorText("Fly Camera");
-        ImGui::SliderFloat("Move speed", &flyCamera->MoveSpeed, 0.5f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Move speed", &flyCamera->Settings.MoveSpeed, 0.5f, 50.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
     }
     if (Spinner* spinner = gameObject.GetComponent<Spinner>()) {
         ImGui::SeparatorText("Spinner");

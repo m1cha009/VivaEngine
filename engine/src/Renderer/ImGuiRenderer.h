@@ -39,6 +39,12 @@ public:
     // letters are needed, ImGui uploads its font texture first, waiting for the GPU to finish.
     uint32_t Record(VkCommandBuffer cmd);
 
+    // Makes an image something ImGui::Image can show (with ImGui's own linear sampler). It must be
+    // in SHADER_READ_ONLY_OPTIMAL layout when the UI is drawn. The returned descriptor set (one of
+    // ImGui's) is the image's ImTextureID. RemoveTexture gives it back, once the GPU is done with it.
+    VkDescriptorSet AddTexture(VkImageView view);
+    void RemoveTexture(VkDescriptorSet texture);
+
 private:
     // The SPIR-V of our version of ImGui's fragment shader (shaders/ImGui.frag). The backend
     // reads it whenever it builds its shaders, so it must live as long as the backend.

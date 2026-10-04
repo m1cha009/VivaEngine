@@ -1,15 +1,22 @@
 #include "EditorApp.h"
 
-#include "Viva/Assets.h"
+#include "EditorUi.h"
+#include "HierarchyWindow.h"
+#include "InspectorWindow.h"
+
 #include "Viva/Camera.h"
 #include "Viva/FileSystem.h"
-#include "Viva/FlyCamera.h"
 #include "Viva/GameObject.h"
+#include "Viva/Input.h"
 #include "Viva/Log.h"
+#include "Viva/Renderer.h"
 #include "Viva/Scene.h"
 
-#include <imgui.h>
+// imgui_internal.h has the DockBuilder functions, which build a docking layout in code. They're
+// ImGui's own "internal" API: public enough to use, but more likely to change between versions.
+#include <imgui_internal.h>
 
+#include <string_view>
 #include <utility>
 
 using namespace Viva;
@@ -17,6 +24,26 @@ using namespace Viva;
 namespace {
 
 constexpr const char* kTitle = "VivaEditor";
+
+// Unity's default layout, roughly: the Hierarchy on the left, the Inspector on the right, the
+// Project and Console as tabs along the bottom, and the Scene in the middle. Splitting a node gives
+// back the new node on one side and, through the last argument, what's left.
+void BuildDefaultLayout(ImGuiID dockspace)
+{
+    ImGui::DockBuilderRemoveNode(dockspace);
+    ImGui::DockBuilderAddNode(dockspace, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace, ImGui::GetMainViewport()->WorkSize);
+    ImGuiID center = dockspace;
+    const ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.18f, nullptr, &center);
+    const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, nullptr, &center);
+    const ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.3f, nullptr, &center);
+    ImGui::DockBuilderDockWindow("Hierarchy", left);
+    ImGui::DockBuilderDockWindow("Inspector", right);
+    ImGui::DockBuilderDockWindow("Project", bottom);
+    ImGui::DockBuilderDockWindow("Console", bottom);
+    ImGui::DockBuilderDockWindow("Scene", center);
+    ImGui::DockBuilderFinish(dockspace);
+}
 
 } // namespace
 
@@ -39,17 +66,54 @@ void EditorApp::OnStart()
     }
     m_ProjectManager = std::make_unique<ProjectManager>(settingsFolder);
 
+    // The editor's windows dock into each other, Unity-style: ImGui's docking build (M15).
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    // The window layout as the user left it. ImGui keeps it as .ini text, which it can only apply
+    // to windows it hasn't created yet, so it's loaded now, before the first frame. It's the
+    // user's, like Unity's layouts, not the project's.
+    m_LayoutPath = settingsFolder + "layout.ini";
+    if (PathExists(m_LayoutPath)) {
+        if (const std::optional<std::string> layout = ReadTextFile(m_LayoutPath))
+            ImGui::LoadIniSettingsFromMemory(layout->c_str(), layout->size());
+    }
+
+    // Edit mode: the scene is shown, but its components don't run, as in Unity before Play (M18).
+    SetSceneUpdating(false);
+
     if (!m_Options.OpenFolder.empty())
         OpenProject(NormalizePath(m_Options.OpenFolder));
 }
 
-void EditorApp::OnUpdate(float /*dt*/)
+void EditorApp::OnShutdown()
 {
-    if (m_Project) {
-        DrawProjectPanel();
-    } else if (const std::optional<std::string> folder = m_ProjectManager->Draw()) {
+    size_t size = 0;
+    const char* layout = ImGui::SaveIniSettingsToMemory(&size);
+    WriteTextFile(m_LayoutPath, std::string_view(layout, size));
+}
+
+void EditorApp::OnUpdate(float dt)
+{
+    if (m_Project)
+        DrawEditor(dt);
+    else if (const std::optional<std::string> folder = m_ProjectManager->Draw())
         OpenProject(*folder);
-    }
+    UpdateTitle();
+}
+
+void EditorApp::OnRender()
+{
+    // The scene has set its main camera; the Scene view shows it from the editor's instead.
+    if (m_Project)
+        m_SceneView.Render(GetRenderer(), GetScene());
+}
+
+bool EditorApp::OnQuitRequested()
+{
+    if (!m_Project || !m_SceneDirty)
+        return true;
+    AskToSaveThen([this] { Quit(); });
+    return false;
 }
 
 void EditorApp::OpenProject(const std::string& folder)
@@ -61,28 +125,14 @@ void EditorApp::OpenProject(const std::string& folder)
         return;
     }
 
-    // A fresh start: the old scene goes (at the end of this frame), and with it, once nothing uses
-    // them, the old project's assets. A fresh Assets, rooted in the project's Assets folder, means
-    // nothing loaded for one project is shared with the next.
+    // A fresh start: a fresh Assets, rooted in the project's Assets folder, so nothing loaded for
+    // one project is shared with the next.
     CloseProject();
     m_Project = std::move(project);
     SetAssetsFolder(m_Project->GetAssetsFolder());
     m_ProjectManager->GetList().Add(*m_Project, true);
-
-    // The scene opens even if it fails to load: the project is still the project, and the log
-    // (and, from M15, the Console) says what went wrong.
-    Scene& scene = GetScene();
-    if (!scene.Load(m_Project->GetStartupScenePath(), GetAssets()))
-        Log::Warn("{}'s startup scene didn't load: the scene is empty", m_Project->GetName());
-
-    // For now the scene is only looked at: the main camera gets a FlyCamera, if it hasn't got one,
-    // so you can look around. (M15 gives the editor a camera of its own instead.)
-    if (Camera* camera = scene.GetMainCamera()) {
-        if (!camera->GetGameObject().GetComponent<FlyCamera>())
-            camera->GetGameObject().AddComponent<FlyCamera>();
-    }
-
-    SetWindowTitle(std::string(kTitle) + " - " + m_Project->GetName());
+    m_ProjectWindow.SetProject(&*m_Project);
+    LoadScene(m_Project->GetStartupScenePath());
     Log::Info("Project opened: {} ({})", m_Project->GetName(), m_Project->GetFolder());
 }
 
@@ -92,26 +142,237 @@ void EditorApp::CloseProject()
         return;
     Log::Info("Project closed: {}", m_Project->GetName());
     GetScene().Clear();
-    // Back to the editor's own (empty) assets folder, so the project's models can go.
+    // Back to the editor's own (empty) assets folder, so the project's models can go, and back to
+    // drawing into the window: the Project Manager has no Scene view.
     SetAssetsFolder(GetExecutableDirectory() + "assets/");
+    GetRenderer().SetSceneTargetSize(0, 0);
+    m_ProjectWindow.SetProject(nullptr);
     m_Project.reset();
-    SetWindowTitle(kTitle);
+    SceneReplaced({});
     // A project may have been deleted or moved while it was open.
     m_ProjectManager->GetList().RefreshMissing();
 }
 
-void EditorApp::DrawProjectPanel()
+void EditorApp::NewScene()
 {
-    ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Project", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
-    ImGui::TextUnformatted(m_Project->GetName().c_str());
-    ImGui::TextDisabled("%s", m_Project->GetFolder().c_str());
-    ImGui::TextDisabled("%zu GameObjects", GetScene().GetGameObjects().size());
-    ImGui::Separator();
-    ImGui::TextDisabled("Fly: W/A/S/D, Q/E, Shift; look: right mouse button");
-    // Closing is done after the panel is finished: the panel shows the project's name.
-    const bool close = ImGui::Button("Close Project");
-    ImGui::End();
-    if (close)
-        CloseProject();
+    AskToSaveThen([this] {
+        // Like Unity's new scene: nothing but a camera, not saved anywhere yet.
+        Scene& scene = GetScene();
+        scene.Clear();
+        GameObject& camera = scene.CreateGameObject("Main Camera");
+        camera.GetTransform().LocalPosition = { 0.0f, 1.0f, -10.0f };
+        camera.AddComponent<Camera>();
+        SceneReplaced({});
+    });
+}
+
+void EditorApp::OpenScene(const std::string& path)
+{
+    AskToSaveThen([this, path] { LoadScene(path); });
+}
+
+void EditorApp::ShowOpenSceneDialog()
+{
+    ShowOpenFileDialog("Open Scene", m_Project->GetScenesFolder(), "Scene files", Scene::kFileExtension,
+                       [this](const std::string& path) {
+                           if (m_Project) // it may have been closed while the dialog was open
+                               OpenScene(path);
+                       });
+}
+
+void EditorApp::LoadScene(const std::string& path)
+{
+    // Clear, then Load: Unity's LoadScene in its default, single mode. If the file doesn't load
+    // (the Console says why), the scene stays empty and unnamed.
+    Scene& scene = GetScene();
+    scene.Clear();
+    SceneReplaced(scene.Load(path, GetAssets()) ? path : std::string());
+}
+
+void EditorApp::SceneReplaced(std::string path)
+{
+    m_ScenePath = std::move(path);
+    m_SceneDirty = false;
+    m_Selection = nullptr;
+    m_SceneView.StartAtMainCamera(GetScene());
+}
+
+void EditorApp::SaveScene(std::function<void()> then)
+{
+    if (!m_Project)
+        return;
+    if (m_ScenePath.empty()) {
+        SaveSceneAs(std::move(then));
+        return;
+    }
+    if (!GetScene().Save(m_ScenePath))
+        return; // the Console says why; whatever was waiting on the save doesn't happen
+    m_SceneDirty = false;
+    m_ProjectWindow.Refresh();
+    if (then)
+        then();
+}
+
+void EditorApp::SaveSceneAs(std::function<void()> then)
+{
+    if (!m_Project)
+        return;
+    const std::string extension = std::string(".") + Scene::kFileExtension;
+    const std::string start =
+        m_ScenePath.empty() ? m_Project->GetScenesFolder() + "/" + GetSceneName() + extension : m_ScenePath;
+    // The dialog answers in a later frame, so what to do after saving travels with the callback.
+    ShowSaveFileDialog("Save Scene As", start, "Scene files", Scene::kFileExtension,
+                       [this, extension, then = std::move(then)](std::string path) mutable {
+                           if (!path.ends_with(extension))
+                               path += extension;
+                           m_ScenePath = std::move(path);
+                           SaveScene(std::move(then));
+                       });
+}
+
+void EditorApp::AskToSaveThen(std::function<void()> action)
+{
+    if (!m_SceneDirty) {
+        action();
+        return;
+    }
+    m_AfterSavePrompt = std::move(action);
+    m_OpenSavePrompt = true;
+}
+
+void EditorApp::DrawEditor(float dt)
+{
+    Scene& scene = GetScene();
+    // The selection is forgotten once its object is gone. A raw pointer can't tell by itself, so
+    // the scene is asked (see Scene::Contains).
+    if (m_Selection && (!scene.Contains(m_Selection) || m_Selection->IsDestroyed()))
+        m_Selection = nullptr;
+
+    DrawMenuBar();
+    if (!m_Project)
+        return; // the menu closed it
+
+    // The dock space fills the window below the menu bar; the windows dock into it. Its layout is
+    // built in code the first time, and on Window > Reset Layout.
+    const ImGuiID dockspace = ImGui::GetID("Editor");
+    if (m_ResetLayout || !ImGui::DockBuilderGetNode(dockspace)) {
+        BuildDefaultLayout(dockspace);
+        m_ResetLayout = false;
+    }
+    ImGui::DockSpaceOverViewport(dockspace, ImGui::GetMainViewport());
+
+    m_SceneView.Update(dt);
+    if (m_Show.Scene)
+        m_SceneView.Draw(GetRenderer(), &m_Show.Scene);
+    if (m_Show.Hierarchy)
+        DrawHierarchyWindow(scene, m_Selection, &m_Show.Hierarchy);
+    if (m_Show.Inspector)
+        m_SceneDirty |= DrawInspectorWindow(m_Selection, GetAssets(), &m_Show.Inspector);
+    if (m_Show.Project) {
+        if (const std::optional<std::string> path = m_ProjectWindow.Draw(&m_Show.Project))
+            OpenScene(*path);
+    }
+    if (m_Show.Console)
+        m_Console.Draw(&m_Show.Console);
+
+    // F frames the selection in the Scene view. Input doesn't see the key while a text field has
+    // the keyboard (M9), so typing an F into a field doesn't move the camera.
+    if (m_Selection && Input::GetKeyDown(Key::F))
+        m_SceneView.Frame(*m_Selection);
+
+    DrawSavePrompt();
+}
+
+void EditorApp::DrawMenuBar()
+{
+    // Keyboard shortcuts work anywhere in the editor (RouteGlobal), menu open or not.
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
+        NewScene();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal))
+        ShowOpenSceneDialog();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+        SaveScene();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+        SaveSceneAs();
+
+    if (!ImGui::BeginMainMenuBar())
+        return;
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("New Scene", "Ctrl+N"))
+            NewScene();
+        if (ImGui::MenuItem("Open Scene...", "Ctrl+O"))
+            ShowOpenSceneDialog();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Save", "Ctrl+S"))
+            SaveScene();
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
+            SaveSceneAs();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Close Project"))
+            AskToSaveThen([this] { CloseProject(); });
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Window")) {
+        // A menu item with a bool* shows a check mark and flips the bool when clicked.
+        ImGui::MenuItem("Scene", nullptr, &m_Show.Scene);
+        ImGui::MenuItem("Hierarchy", nullptr, &m_Show.Hierarchy);
+        ImGui::MenuItem("Inspector", nullptr, &m_Show.Inspector);
+        ImGui::MenuItem("Project", nullptr, &m_Show.Project);
+        ImGui::MenuItem("Console", nullptr, &m_Show.Console);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Layout")) {
+            m_Show = {};
+            m_ResetLayout = true;
+        }
+        ImGui::EndMenu();
+    }
+    ImGui::EndMainMenuBar();
+}
+
+void EditorApp::DrawSavePrompt()
+{
+    if (m_OpenSavePrompt) {
+        ImGui::OpenPopup("Unsaved Changes");
+        m_OpenSavePrompt = false;
+    }
+    CenterNextWindow();
+    if (!ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    ImGui::Text("%s has unsaved changes. Save them first?", GetSceneName().c_str());
+    ImGui::Spacing();
+    // std::exchange takes the waiting action out, leaving nothing behind.
+    if (ImGui::Button("Save", ImVec2(120.0f, 0.0f))) {
+        ImGui::CloseCurrentPopup();
+        SaveScene(std::exchange(m_AfterSavePrompt, {}));
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Don't Save", ImVec2(120.0f, 0.0f))) {
+        ImGui::CloseCurrentPopup();
+        m_SceneDirty = false;
+        if (std::function<void()> action = std::exchange(m_AfterSavePrompt, {}))
+            action();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+        ImGui::CloseCurrentPopup();
+        m_AfterSavePrompt = {};
+    }
+    ImGui::EndPopup();
+}
+
+void EditorApp::UpdateTitle()
+{
+    // "VivaEditor - MyGame - Main*", where * means unsaved changes, as in Unity's title bar.
+    std::string title = kTitle;
+    if (m_Project)
+        title += " - " + m_Project->GetName() + " - " + GetSceneName() + (m_SceneDirty ? "*" : "");
+    if (title != m_Title) {
+        SetWindowTitle(title);
+        m_Title = std::move(title);
+    }
+}
+
+std::string EditorApp::GetSceneName() const
+{
+    return m_ScenePath.empty() ? "Untitled" : GetFileStem(m_ScenePath);
 }

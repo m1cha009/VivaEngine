@@ -83,9 +83,21 @@ protected:
     virtual void OnFixedUpdate(float /*fixedDt*/) {}
     // Called once after the loop ends, while the window still exists. Like OnDestroy().
     virtual void OnShutdown() {}
+    // Called once per frame after the scene has been handed to the renderer (its MeshRenderers
+    // submitted, its main camera set) and before the frame is drawn: the place to draw from
+    // another camera (the editor's Scene view) or to submit more.
+    virtual void OnRender() {}
+    // Called when the user closes the window. Return false to keep running, for example to ask
+    // whether to save first, then call Quit() when it's time. Unity's Application.wantsToQuit.
+    virtual bool OnQuitRequested() { return true; }
 
     // Changes the text in the window's title bar.
     void SetWindowTitle(const std::string& title);
+
+    // Whether the scene's components update (OnStart, OnUpdate, OnLateUpdate, OnFixedUpdate) each
+    // frame; it's still drawn either way. On by default. The editor turns it off while editing,
+    // like Unity's Edit mode, where scripts don't run.
+    void SetSceneUpdating(bool updating) { m_SceneUpdating = updating; }
 
     // The renderer: create meshes, textures and materials with it (from OnStart on). See
     // Viva/Renderer.h.
@@ -116,6 +128,7 @@ private:
     std::unique_ptr<Assets> m_Assets;
     std::unique_ptr<Scene> m_Scene;
     bool m_QuitRequested = false;
+    bool m_SceneUpdating = true;
 };
 
 } // namespace Viva

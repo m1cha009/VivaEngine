@@ -109,8 +109,19 @@ public:
     // The color each frame starts from, which shows wherever nothing is drawn: a linear color.
     // The scene sets it every frame from its main camera's BackgroundColor. Black until then.
     void SetClearColor(const glm::vec3& color);
-    // The width of the image being drawn divided by its height: a camera's projection needs it.
+    // The width of the image the scene is drawn into divided by its height: a camera's projection
+    // needs it.
     float GetAspectRatio() const;
+
+    // The editor's Scene view (M15): draws the scene into an image of its own, width x height
+    // pixels, instead of into the window. The window then shows only the UI, and the UI shows the
+    // scene with ImGui::Image(GetSceneTexture(), size), as a "render texture". Call it every frame
+    // the image is shown: in a frame without the call, the image is kept but not drawn into. 0 x 0,
+    // the default, draws the scene into the window, as games do. A new size takes effect at the
+    // next BeginFrame.
+    void SetSceneTargetSize(uint32_t width, uint32_t height);
+    // The scene's image as an ImTextureID, for ImGui::Image, or 0 while there's none.
+    uint64_t GetSceneTexture() const;
 
     // Numbers about the last frame drawn: draw calls, triangles and GPU memory.
     const RenderStats& GetStats() const;

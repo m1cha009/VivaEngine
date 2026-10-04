@@ -16,7 +16,7 @@ add_library(VivaEngine STATIC
     src/Core/Version.cpp
     src/Platform/Debugger.cpp
     src/Platform/FileSystem.cpp
-    src/Platform/FolderDialog.cpp
+    src/Platform/FileDialog.cpp
     src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp

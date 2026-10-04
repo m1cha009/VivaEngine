@@ -330,10 +330,9 @@ std::unique_ptr<Model> Model::Load(Assets& assets, const std::string& assetName)
     // are found relative to it) and the name "BoxTextured".
     const size_t slash = assetName.rfind('/');
     const std::string folder = slash == std::string::npos ? "" : assetName.substr(0, slash + 1);
-    const std::string fileName = assetName.substr(folder.size());
 
     auto model = std::make_unique<Model>();
-    model->m_Name = fileName.substr(0, fileName.rfind('.'));
+    model->m_Name = GetFileStem(assetName);
 
     // The materials first (with the textures they use), then the meshes that use them.
     const std::vector<std::shared_ptr<Material>> materials = LoadMaterials(assets, *data, folder, assetName);

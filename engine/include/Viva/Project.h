@@ -40,6 +40,8 @@ public:
     const std::string& GetFolder() const { return m_Folder; }
     // The folder asset names start from, ending with a separator: what the project's Assets use.
     std::string GetAssetsFolder() const { return m_Folder + "/Assets/"; }
+    // Where the project's scene files go, without a separator at the end.
+    std::string GetScenesFolder() const { return m_Folder + "/Scenes"; }
     // The scene that opens first, as a full path.
     std::string GetStartupScenePath() const { return m_Folder + "/" + m_StartupScene; }
 

@@ -34,6 +34,9 @@ std::string GetDocumentsFolder();
 // one folder ("C:\Games\X\" and "C:/Games/X") compare equal as text.
 std::string NormalizePath(std::string_view path);
 
+// A file's name without its folder and its extension: "Main" for "C:/Game/Scenes/Main.scene".
+std::string GetFileStem(std::string_view path);
+
 // Reads a whole file into memory. Returns std::nullopt (after logging why) if it can't.
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path);
 // The same, as text.
@@ -65,5 +68,15 @@ bool DeleteFolder(const std::string& path);
 // running Application (its window, and its event handling).
 void ShowFolderDialog(const std::string& title, const std::string& startFolder,
                       std::function<void(const std::string& folder)> onChosen);
+
+// The same for opening a file: the window lists the files ending in .`extension` ("scene", without
+// the dot), which `filterName` describes ("Scene files").
+void ShowOpenFileDialog(const std::string& title, const std::string& startFolder, const std::string& filterName,
+                        const std::string& extension, std::function<void(const std::string& path)> onChosen);
+
+// The same for saving: the user picks a folder and types a name, starting at `startPath` (a folder,
+// or a file to suggest). The chosen path may lack the extension if the user didn't type it.
+void ShowSaveFileDialog(const std::string& title, const std::string& startPath, const std::string& filterName,
+                        const std::string& extension, std::function<void(const std::string& path)> onChosen);
 
 } // namespace Viva

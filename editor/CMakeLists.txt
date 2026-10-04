@@ -1,11 +1,17 @@
 # VivaEditor (M14): the editor, a second program built on the engine library, next to the
-# Sandbox. It starts in the Project Manager, which creates and opens projects; M15 to M18 turn it
-# into a scene editor.
+# Sandbox. It starts in the Project Manager, which creates and opens projects (M14), and edits
+# their scenes in docked windows (M15 onwards).
 add_executable(VivaEditor
+    src/ConsoleWindow.cpp
     src/EditorApp.cpp
+    src/EditorCamera.cpp
+    src/HierarchyWindow.cpp
+    src/InspectorWindow.cpp
     src/Main.cpp
     src/ProjectList.cpp
-    src/ProjectManager.cpp)
+    src/ProjectManager.cpp
+    src/ProjectWindow.cpp
+    src/SceneView.cpp)
 
 # The same as the Sandbox: the engine brings its public headers, GLM and ImGui along.
 target_link_libraries(VivaEditor PRIVATE VivaEngine)

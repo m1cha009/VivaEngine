@@ -19,6 +19,12 @@ class GameObject;
 // them directly. Everything in world space is computed from them when asked.
 class Transform {
 public:
+    // The axes in an object's own space: Forward (+Z), Up (+Y) and Right (-X), as below. Rotating
+    // them by an object's rotation gives the directions Forward(), Up() and Right() return.
+    static constexpr glm::vec3 kForwardAxis { 0.0f, 0.0f, 1.0f };
+    static constexpr glm::vec3 kUpAxis { 0.0f, 1.0f, 0.0f };
+    static constexpr glm::vec3 kRightAxis { -1.0f, 0.0f, 0.0f };
+
     // Leaves the hierarchy: its parent forgets it, and its children become root objects. So
     // whatever order the scene destroys GameObjects in, no Transform is left pointing at one
     // that's gone.

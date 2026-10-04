@@ -49,6 +49,14 @@ std::string NormalizePath(std::string_view path)
     return result;
 }
 
+std::string GetFileStem(std::string_view path)
+{
+    const std::string normalized = NormalizePath(path);
+    const size_t slash = normalized.rfind('/');
+    const std::string name = slash == std::string::npos ? normalized : normalized.substr(slash + 1);
+    return name.substr(0, name.rfind('.'));
+}
+
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path)
 {
     // SDL_LoadFile reads the whole file into memory that SDL allocates. It takes a UTF-8 path on

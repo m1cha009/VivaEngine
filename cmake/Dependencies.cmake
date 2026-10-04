@@ -104,9 +104,11 @@ find_package(Vulkan REQUIRED COMPONENTS glslc)
 # An "immediate mode" GUI: code describes the UI anew every frame, like Unity's OnGUI and
 # EditorGUILayout (if (ImGui::Button("Reset")) ...). Its archive has no CMakeLists.txt, so the
 # targets are defined here.
+# The "docking" build of the same release (M15): ImGui's official branch with dockable windows,
+# which the editor's layout needs. It's tagged for each release, like the main one.
 FetchContent_Declare(imgui
-    URL https://github.com/ocornut/imgui/archive/refs/tags/v1.92.9b.tar.gz
-    URL_HASH SHA256=21d8a0a565e85dce943e375db00812c2f3f0ab21f3f0f7964e364a63422d7f99)
+    URL https://github.com/ocornut/imgui/archive/refs/tags/v1.92.9b-docking.tar.gz
+    URL_HASH SHA256=90ded916bd57db2e0e171b6b098940a47c6f5042725dcdc67fb19940ca8bfdcc)
 FetchContent_MakeAvailable(imgui)
 
 # ImGui comes in two parts. The core (imgui.h) is what games call to build their windows. The

@@ -1,5 +1,7 @@
 #include "ProjectManager.h"
 
+#include "EditorUi.h"
+
 #include "Viva/FileSystem.h"
 #include "Viva/Project.h"
 
@@ -62,12 +64,6 @@ std::string UnusedProjectName(const std::string& location)
     for (int number = 2; PathExists(location + "/" + name); ++number)
         name = std::format("My Project {}", number);
     return name;
-}
-
-// Popups appear in the middle of the window, the first time they open.
-void CenterNextWindow()
-{
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 }
 
 constexpr ImVec4 kErrorColor(1.0f, 0.45f, 0.4f, 1.0f);

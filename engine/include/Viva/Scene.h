@@ -58,6 +58,8 @@ public:
     // registered (see Viva/ComponentRegistry.h), and meshes and textures made in code, can't be
     // written: they're left out, with a warning for each.
     bool Save(const std::string& path) const;
+    // Scene files end in .scene (this is without the dot, as file dialogs want it).
+    static constexpr const char* kFileExtension = "scene";
     // Adds the file's GameObjects to the scene, next to any already in it (Unity's LoadScene with
     // LoadSceneMode.Additive). Their meshes, textures and materials come from `assets`. A component
     // type that isn't registered is left out, with a warning. Their OnStart runs before their first
@@ -69,8 +71,8 @@ private:
     friend class Application;
     void FixedUpdate(float fixedDt);
     void Update(float dt);
-    // Removes the objects destroyed this frame, then submits every visible MeshRenderer, seen from
-    // the main camera.
+    // Removes the objects destroyed this frame, hands the renderer the main camera (if any), then
+    // submits every visible MeshRenderer.
     void Render(Renderer& renderer);
 
     void StartNewComponents();

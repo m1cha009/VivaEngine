@@ -57,6 +57,35 @@ struct DrawCommand {
     glm::mat4 Transform { 1.0f };
 };
 
+// What the window shows behind the UI while the scene goes into a scene target: the editor's
+// background, as a linear color. The docked windows cover nearly all of it.
+constexpr glm::vec3 kUiBackground(0.01f);
+
+// A scene target (see Renderer::SetSceneTargetSize): the image the scene is drawn into, its depth
+// buffer, and the descriptor set through which ImGui shows the image. A GpuResource, so a target
+// that's replaced (the Scene view changed size) goes through the release lists like any other,
+// and is destroyed once the frames in flight are done with it, with no wait for the GPU.
+class SceneTarget : public GpuResource {
+public:
+    SceneTarget(ImGuiRenderer& imgui, VkExtent2D extent, std::unique_ptr<Image> color, std::unique_ptr<Image> depth)
+        : Extent(extent)
+        , Color(std::move(color))
+        , Depth(std::move(depth))
+        , Texture(imgui.AddTexture(Color->GetView()))
+        , m_ImGui(imgui)
+    {
+    }
+    ~SceneTarget() override { m_ImGui.RemoveTexture(Texture); }
+
+    const VkExtent2D Extent;
+    const std::unique_ptr<Image> Color;
+    const std::unique_ptr<Image> Depth;
+    const VkDescriptorSet Texture; // the image's ImTextureID
+
+private:
+    ImGuiRenderer& m_ImGui;
+};
+
 } // namespace
 
 // The renderer's state and logic, hidden from the public header (see Renderer.h). Renderer's
@@ -83,12 +112,24 @@ public:
     void SetCamera(const glm::mat4& view, const glm::mat4& projection);
     void SetClearColor(const glm::vec3& color) { m_ClearColor = color; }
     float GetAspectRatio() const;
+    void SetSceneTargetSize(uint32_t width, uint32_t height)
+    {
+        m_SceneTargetRequested = { width, height };
+        m_SceneTargetShown = true;
+    }
+    uint64_t GetSceneTexture() const { return m_SceneTarget ? reinterpret_cast<uint64_t>(m_SceneTarget->Texture) : 0; }
     bool BeginFrame();
     void EndFrame();
 
 private:
     std::shared_ptr<Shader> LoadShader(const std::string& name);
     bool RecreateSwapchain();
+    void RecreateSceneTarget();
+    std::unique_ptr<Image> CreateDepthImage(VkExtent2D extent) const;
+    // Records one rendering: into `color` (whose layout must be COLOR_ATTACHMENT_OPTIMAL) and
+    // `depth`, cleared to `clearColor`, with the scene's draws and/or the UI.
+    void RecordRendering(VkCommandBuffer cmd, VkImageView color, const Image& depth, VkExtent2D extent,
+                         const glm::vec3& clearColor, bool drawScene, bool drawUi);
     void RecordDraws(VkCommandBuffer cmd);
     void UpdateMemoryStats();
     static void DestroyReleased(FrameData& frame);
@@ -130,6 +171,12 @@ private:
     std::unique_ptr<Swapchain> m_Swapchain;
     std::unique_ptr<Image> m_DepthImage; // the swapchain images' size, so it's rebuilt with them
     std::unique_ptr<ImGuiRenderer> m_ImGui; // draws the debug UI over the scene
+
+    // The scene target (see SetSceneTargetSize). Declared after m_ImGui, so it's destroyed before
+    // it: its destructor hands its texture back to ImGui.
+    VkExtent2D m_SceneTargetRequested {};     // the size asked for, applied in BeginFrame
+    std::unique_ptr<SceneTarget> m_SceneTarget; // null: the scene goes into the window
+    bool m_SceneTargetShown = false;          // SetSceneTargetSize was called this frame
 
     // The engine's defaults: the shader every material uses, and the texture for materials
     // created without one.
@@ -174,6 +221,8 @@ bool Renderer::IsVSync() const { return m_Impl->IsVSync(); }
 void Renderer::SetCamera(const glm::mat4& view, const glm::mat4& projection) { m_Impl->SetCamera(view, projection); }
 void Renderer::SetClearColor(const glm::vec3& color) { m_Impl->SetClearColor(color); }
 float Renderer::GetAspectRatio() const { return m_Impl->GetAspectRatio(); }
+void Renderer::SetSceneTargetSize(uint32_t width, uint32_t height) { m_Impl->SetSceneTargetSize(width, height); }
+uint64_t Renderer::GetSceneTexture() const { return m_Impl->GetSceneTexture(); }
 bool Renderer::BeginFrame() { return m_Impl->BeginFrame(); }
 void Renderer::EndFrame() { m_Impl->EndFrame(); }
 const std::string& Renderer::GetAssetName(const Mesh& mesh) { return mesh.GetAssetName(); }
@@ -340,9 +389,10 @@ void Renderer::Impl::SetCamera(const glm::mat4& view, const glm::mat4& projectio
 
 float Renderer::Impl::GetAspectRatio() const
 {
-    // The swapchain's size, which BeginFrame keeps in step with the window. Using it, rather than
-    // the window's, means the picture never stretches while the window is being resized.
-    const VkExtent2D extent = m_Swapchain->GetExtent();
+    // The scene target's size if there is one, otherwise the swapchain's, which BeginFrame keeps
+    // in step with the window. Using it, rather than the window's, means the picture never
+    // stretches while the window is being resized.
+    const VkExtent2D extent = m_SceneTarget ? m_SceneTarget->Extent : m_Swapchain->GetExtent();
     return static_cast<float>(extent.width) / static_cast<float>(extent.height);
 }
 
@@ -377,16 +427,42 @@ bool Renderer::Impl::RecreateSwapchain()
     m_Frames->EnsureRenderFinishedSemaphores(m_Swapchain->GetImageCount());
 
     // The depth buffer must be exactly as big as the images it's drawn with.
-    m_DepthImage = Image::Create(*m_Context, {
-        .Extent = m_Swapchain->GetExtent(),
-        .Format = VulkanContext::kDepthFormat,
-        .Usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        .Aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
-    });
+    m_DepthImage = CreateDepthImage(m_Swapchain->GetExtent());
 
     m_SwapchainWindowSize = size;
     m_SwapchainOutdated = false;
     return true;
+}
+
+void Renderer::Impl::RecreateSceneTarget()
+{
+    // The old target may still be in use by the frames in flight, so it's parked in the release
+    // list of the frame this BeginFrame starts (its fence was just waited on), like a resource the
+    // game lets go of (M8). By the time that list is emptied, the frames that used it are done.
+    if (m_SceneTarget)
+        m_Frames->GetFrame(m_FrameIndex).ReleasedResources.push_back(std::move(m_SceneTarget));
+    const VkExtent2D extent = m_SceneTargetRequested;
+    if (extent.width == 0 || extent.height == 0)
+        return;
+
+    // The same color format as the swapchain, so the same pipelines can draw into it, and SAMPLED
+    // too, so the UI can read it. A Unity RenderTexture is the same idea.
+    std::unique_ptr<Image> color = Image::Create(*m_Context, {
+        .Extent = extent,
+        .Format = m_Swapchain->GetFormat(),
+        .Usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+    });
+    m_SceneTarget = std::make_unique<SceneTarget>(*m_ImGui, extent, std::move(color), CreateDepthImage(extent));
+}
+
+std::unique_ptr<Image> Renderer::Impl::CreateDepthImage(VkExtent2D extent) const
+{
+    return Image::Create(*m_Context, {
+        .Extent = extent,
+        .Format = VulkanContext::kDepthFormat,
+        .Usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .Aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
+    });
 }
 
 void Renderer::Impl::DestroyReleased(FrameData& frame)
@@ -419,6 +495,11 @@ bool Renderer::Impl::BeginFrame()
     //    can't be in use any more: the GPU finishes frames in order.
     VK_CHECK(vkWaitForFences(device, 1, &frame.InFlight, VK_TRUE, UINT64_MAX));
     DestroyReleased(frame);
+
+    // A Scene view that changed size gets a new target (see RecreateSceneTarget).
+    const VkExtent2D current = m_SceneTarget ? m_SceneTarget->Extent : VkExtent2D {};
+    if (m_SceneTargetRequested.width != current.width || m_SceneTargetRequested.height != current.height)
+        RecreateSceneTarget();
 
     // 2. Ask the swapchain which image to draw into next. The call returns as soon as it knows the
     //    index; the semaphore is signaled once the image is really free (the display may still be
@@ -469,8 +550,40 @@ void Renderer::Impl::EndFrame()
     };
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
+    // With a scene target (the editor's Scene view), the scene is drawn into it first, and the
+    // window's image gets only the UI, which shows the target. Without one, the scene and the UI
+    // share the window's image, the UI drawn over the scene.
+    // A target that wasn't asked for this frame (its Scene window is hidden behind another tab) is
+    // kept, but nothing is drawn into it: nobody would see it.
+    if (m_SceneTarget && m_SceneTargetShown) {
+        // The old contents don't matter (we're about to clear). The last frame's UI read the image
+        // in its fragment shader, which must be done before this frame draws into it; that's an
+        // execution dependency only, since reading leaves nothing to make visible.
+        TransitionImage(cmd, {
+            .Image = m_SceneTarget->Color->GetHandle(),
+            .OldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .NewLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .SrcStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            .SrcAccess = VK_ACCESS_2_NONE,
+            .DstStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .DstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        });
+        RecordRendering(cmd, m_SceneTarget->Color->GetView(), *m_SceneTarget->Depth, m_SceneTarget->Extent, m_ClearColor,
+                        true, false);
+        // The scene's writes must be finished, and visible, before the UI's fragment shader samples
+        // the image, in the layout made for reading.
+        TransitionImage(cmd, {
+            .Image = m_SceneTarget->Color->GetHandle(),
+            .OldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .NewLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .SrcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .SrcAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .DstStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            .DstAccess = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+        });
+    }
+
     const VkImage image = m_Swapchain->GetImage(m_ImageIndex);
-    const VkExtent2D extent = m_Swapchain->GetExtent();
 
     // The old contents don't matter (we're about to clear), so the old layout is UNDEFINED. The
     // source stage is the one the "image acquired" semaphore wait applies to (see the submit), so
@@ -484,71 +597,9 @@ void Renderer::Impl::EndFrame()
         .DstStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         .DstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
     });
-
-    // The depth buffer's old contents don't matter either. Both frames in flight share it, so the
-    // previous frame's depth tests (which read and write it in the fragment-test stages) must be
-    // finished before this frame clears it.
-    TransitionImage(cmd, {
-        .Image = m_DepthImage->GetHandle(),
-        .Aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
-        .OldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .NewLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .SrcStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-        .SrcAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        .DstStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-        .DstAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-    });
-
-    // Dynamic rendering: draw straight into the image views. The color image is cleared to the
-    // background (the camera's color) and kept for presenting (STORE). The depth buffer is cleared to 1.0, the far
-    // plane, so anything drawn is nearer; it isn't needed after the frame, so DONT_CARE lets the
-    // GPU skip writing it back to memory.
-    const VkRenderingAttachmentInfo colorAttachment {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = m_Swapchain->GetImageView(m_ImageIndex),
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = { .color = { { m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, 1.0f } } },
-    };
-    const VkRenderingAttachmentInfo depthAttachment {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = m_DepthImage->GetView(),
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue = { .depthStencil = { .depth = 1.0f } },
-    };
-    const VkRenderingInfo renderingInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = { .extent = extent },
-        .layerCount = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachment,
-        .pDepthAttachment = &depthAttachment,
-    };
-    vkCmdBeginRendering(cmd, &renderingInfo);
-
-    // The pipelines' dynamic state: viewport and scissor cover the whole image. Set once here,
-    // they apply to every draw that follows in this command buffer. The viewport's depth range
-    // is Vulkan's 0..1.
-    const VkViewport viewport {
-        .width = static_cast<float>(extent.width),
-        .height = static_cast<float>(extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    const VkRect2D scissor { .extent = extent };
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-    RecordDraws(cmd);
-
-    // The debug UI goes last, in the same rendering, so it's drawn over the scene. ImGui's
-    // pipeline doesn't test depth, so the scene can't hide it.
-    m_Stats.UiDrawCalls = m_ImGui->Record(cmd);
-
-    vkCmdEndRendering(cmd);
+    const bool sceneInWindow = m_SceneTarget == nullptr;
+    RecordRendering(cmd, m_Swapchain->GetImageView(m_ImageIndex), *m_DepthImage, m_Swapchain->GetExtent(),
+                    sceneInWindow ? m_ClearColor : kUiBackground, sceneInWindow, true);
 
     // Hand the image to presentation once the drawing's writes are done. Nothing after it in this
     // frame uses the image, so the destination stage is NONE: the semaphore covers the rest.
@@ -613,8 +664,80 @@ void Renderer::Impl::EndFrame()
 
     // The submits were used up by this frame; the next frame builds its own list.
     m_DrawList.clear();
+    m_SceneTargetShown = false;
     m_FrameOpen = false;
     m_FrameIndex = (m_FrameIndex + 1) % FrameResources::kFramesInFlight;
+}
+
+void Renderer::Impl::RecordRendering(VkCommandBuffer cmd, VkImageView color, const Image& depth, VkExtent2D extent,
+                                     const glm::vec3& clearColor, bool drawScene, bool drawUi)
+{
+    // The depth buffer's old contents don't matter. Both frames in flight share it, so the
+    // previous frame's depth tests (which read and write it in the fragment-test stages) must be
+    // finished before this frame clears it.
+    TransitionImage(cmd, {
+        .Image = depth.GetHandle(),
+        .Aspect = VK_IMAGE_ASPECT_DEPTH_BIT,
+        .OldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .NewLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .SrcStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        .SrcAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .DstStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        .DstAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    });
+
+    // Dynamic rendering: draw straight into the image views. The color image is cleared to the
+    // background (the camera's color) and kept (STORE), for presenting or for the UI to show. The
+    // depth buffer is cleared to 1.0, the far plane, so anything drawn is nearer; it isn't needed
+    // after the rendering, so DONT_CARE lets the GPU skip writing it back to memory. The UI-only
+    // rendering has a depth buffer too, because ImGui's pipeline is built for one.
+    const VkRenderingAttachmentInfo colorAttachment {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = color,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = { .color = { { clearColor.r, clearColor.g, clearColor.b, 1.0f } } },
+    };
+    const VkRenderingAttachmentInfo depthAttachment {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = depth.GetView(),
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue = { .depthStencil = { .depth = 1.0f } },
+    };
+    const VkRenderingInfo renderingInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = { .extent = extent },
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachment,
+        .pDepthAttachment = &depthAttachment,
+    };
+    vkCmdBeginRendering(cmd, &renderingInfo);
+
+    // The pipelines' dynamic state: viewport and scissor cover the whole image. Set once here,
+    // they apply to every draw that follows in this rendering. The viewport's depth range is
+    // Vulkan's 0..1.
+    const VkViewport viewport {
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    const VkRect2D scissor { .extent = extent };
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    if (drawScene)
+        RecordDraws(cmd);
+    // The debug UI goes last, so it's drawn over the scene. ImGui's pipeline doesn't test depth,
+    // so the scene can't hide it.
+    if (drawUi)
+        m_Stats.UiDrawCalls = m_ImGui->Record(cmd);
+
+    vkCmdEndRendering(cmd);
 }
 
 void Renderer::Impl::UpdateMemoryStats()

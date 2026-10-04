@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-
+#include <utility>
 #include <vector>
 
 // SDL's types, declared here without including SDL's headers. This header is included by Core
@@ -59,7 +59,9 @@ public:
     // the mouse and the cursor's shape. Call it before ImGui::NewFrame().
     void NewImGuiFrame();
 
-    bool ShouldClose() const { return m_ShouldClose; }
+    // Whether the user asked to close the window (its close button, Alt+F4) since the last call.
+    // Asking clears it: the Application may decide not to close (OnQuitRequested).
+    bool TakeCloseRequest() { return std::exchange(m_CloseRequested, false); }
     bool IsMinimized() const;
     // True when there's something to draw into: not minimized, and not dragged down to zero size.
     bool IsDrawable() const { return !IsMinimized() && !GetPixelSize().IsEmpty(); }
@@ -82,7 +84,7 @@ private:
     void HandleEvent(const SDL_Event& event);
 
     SDL_Window* m_Window = nullptr;
-    bool m_ShouldClose = false;
+    bool m_CloseRequested = false;
 };
 
 } // namespace Viva
