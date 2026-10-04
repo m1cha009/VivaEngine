@@ -3,7 +3,7 @@
 # Copies game assets (textures, models...) from the assets/ folder to the same place next to the
 # executables, build/<preset>/bin/assets/, whenever <target> is built. Files are named relative
 # to assets/, for example textures/crate.png. Like shaders, the game finds them relative to the
-# executable at runtime (see GetAssetPath in engine/src/Platform/FileSystem.h), and install()
+# executable at runtime (the Application's Assets start there; see Application::Run), and install()
 # puts them in the packaged build too.
 #
 # Call it once per target, listing all of that target's assets.

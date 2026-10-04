@@ -1,4 +1,4 @@
-#include "FlyCamera.h"
+#include "Viva/FlyCamera.h"
 
 #include "Viva/FieldVisitor.h"
 #include "Viva/Input.h"
@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
-using namespace Viva;
+namespace Viva {
 
 namespace {
 
@@ -80,3 +80,5 @@ void FlyCamera::OnUpdate(float dt)
         transform.LocalPosition += glm::normalize(direction) * speed * dt;
     }
 }
+
+} // namespace Viva

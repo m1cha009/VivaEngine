@@ -66,6 +66,12 @@ private:
 // and why, for example "line 12, column 5: expected ',' or '}'".
 std::optional<Json> ParseJson(std::string_view text, std::string& error);
 
+// Reads a JSON file. With a `format`, the file must also be an object that starts the way the
+// engine's files do, saying what it is and which version of its format: "Format" equal to
+// `format`, and "Version" no newer than `version` (a newer file may hold things this code doesn't
+// know). Returns std::nullopt if the file can't be read or doesn't qualify, with `error` saying why.
+std::optional<Json> ReadJsonFile(const std::string& path, std::string_view format, double version, std::string& error);
+
 // Writes a value as JSON text, indented two spaces per level, one member or element per line. An
 // array of numbers stays on one line, so a position reads [0, 1.5, 0].
 std::string WriteJson(const Json& value);

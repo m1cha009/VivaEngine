@@ -57,22 +57,26 @@ Done on 2026-10-04 (see [`milestones/M13.md`](milestones/M13.md)). Also in M13: 
 
 Goal 1 is done at the end of this milestone.
 
-- [ ] `Project` class: create from a template (folder layout above + an empty `Main.scene` with a
+- [x] `Project` class: create from a template (folder layout above + an empty `Main.scene` with a
       camera and a floor), open (check the file and the engine version), close
-- [ ] Recent-projects list in the settings folder; missing folders are shown greyed out
-- [ ] Folder pickers through SDL3's `SDL_ShowOpenFolderDialog` (no new dependency); file system
+- [x] Recent-projects list in the settings folder; missing folders are shown greyed out
+- [x] Folder pickers through SDL3's `SDL_ShowOpenFolderDialog` (no new dependency); file system
       operations in `Platform/FileSystem`
-- [ ] New `editor/` target `VivaEditor`, with its own `CMakeLists.txt` and presets support
-- [ ] Project Manager window (ImGui):
-  - [ ] the list: name, path, last opened; sort by last opened
-  - [ ] **New Project**: name + location, then it opens
-  - [ ] **Add Existing**: pick a folder that has a `.vivaproject`
-  - [ ] **Open**: loads the project's startup scene
-  - [ ] **Remove from list** (files stay), and **Delete from disk** behind a confirmation dialog
+- [x] New `editor/` target `VivaEditor`, with its own `CMakeLists.txt` and presets support
+- [x] Project Manager window (ImGui):
+  - [x] the list: name, path, last opened; sort by last opened
+  - [x] **New Project**: name + location, then it opens
+  - [x] **Add Existing**: pick a folder that has a `.vivaproject`
+  - [x] **Open**: loads the project's startup scene
+  - [x] **Remove from list** (files stay), and **Delete from disk** behind a confirmation dialog
         that names the folder
-- [ ] After opening: the startup scene is rendered with a fly camera (viewing only, no editing yet)
-- [ ] *You should see:* create two projects, close and reopen the editor, see both, open one,
+- [x] After opening: the startup scene is rendered with a fly camera (viewing only, no editing yet)
+- [x] *You should see:* create two projects, close and reopen the editor, see both, open one,
       delete the other
+
+Done on 2026-10-04 (see [`milestones/M14.md`](milestones/M14.md)). Also in M14: the new-project
+location is remembered and names are suggested ("My Project 2"); `Application::SetAssetsFolder`,
+`Scene::Clear`, `ReadJsonFile`, and `--quit-after`/`--display`/`--no-vsync` read by the engine.
 
 ## M15: Editor shell
 

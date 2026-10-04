@@ -29,6 +29,12 @@ void Scene::Destroy(GameObject& gameObject)
     gameObject.MarkDestroyed();
 }
 
+void Scene::Clear()
+{
+    for (const std::unique_ptr<GameObject>& gameObject : m_GameObjects)
+        gameObject->MarkDestroyed();
+}
+
 bool Scene::Contains(const GameObject* gameObject) const
 {
     // std::ranges::any_of asks the lambda about each element until one says yes (C#'s LINQ Any).

@@ -1,7 +1,7 @@
 #include "Viva/Model.h"
 
 #include "Core/ImageFile.h"
-#include "Platform/FileSystem.h"
+#include "Viva/FileSystem.h"
 #include "Viva/Assets.h"
 #include "Viva/GameObject.h"
 #include "Viva/Log.h"
@@ -315,7 +315,7 @@ std::string NodeName(const cgltf_node& node, size_t index)
 
 std::unique_ptr<Model> Model::Load(Assets& assets, const std::string& assetName)
 {
-    const CgltfData data = Parse(GetAssetPath(assetName));
+    const CgltfData data = Parse(assets.GetFilePath(assetName));
     if (!data)
         return nullptr;
 

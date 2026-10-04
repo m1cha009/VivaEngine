@@ -21,13 +21,15 @@ class Model;
 //             "Primitives::Sphere" and "Primitives::Cylinder" (see Viva/Primitives.h), sized
 //             like Unity's; or one of a model's meshes, "models/CesiumMilkTruck.glb#mesh2/0": the
 //             model's file, then mesh 2's primitive 0, numbered as in the file.
-//   Textures  an image file in the assets folder, "textures/crate.png"; or an image stored inside
+//   Textures  an image file in the root folder, "textures/crate.png"; or an image stored inside
 //             a model, "models/CesiumMilkTruck.glb#image0".
-//   Models    a .gltf or .glb file in the assets folder, "models/CesiumMilkTruck.glb".
+//   Models    a .gltf or .glb file in the root folder, "models/CesiumMilkTruck.glb".
 // Materials have no names: a material is its settings, so a scene file writes those instead.
 class Assets {
 public:
-    explicit Assets(Renderer& renderer);
+    // rootFolder: where asset names start, ending with a separator. The Application's Assets use
+    // the assets folder next to the executable; a project's use the project's Assets folder (M14).
+    Assets(Renderer& renderer, std::string rootFolder);
     ~Assets();
 
     Assets(const Assets&) = delete;
@@ -47,10 +49,14 @@ public:
 
     Renderer& GetRenderer() const { return m_Renderer; }
 
+    // The file an asset name stands for: the root folder plus the name.
+    std::string GetFilePath(const std::string& name) const { return m_RootFolder + name; }
+
 private:
     std::shared_ptr<Mesh> CreatePrimitive(const std::string& name);
 
     Renderer& m_Renderer;
+    std::string m_RootFolder;
 
     // What's loaded. A weak_ptr remembers an asset without keeping it alive (C#'s WeakReference),
     // so an asset nobody uses any more is freed, and loaded again if it's asked for again. Models

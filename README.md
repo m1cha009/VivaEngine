@@ -16,6 +16,12 @@ Space starts, A/D or the arrow keys change lanes, F1 shows the debug windows, Es
 `Sandbox --demo` shows the engine's demo scene (M10, M11) instead, and `Sandbox --load <file>` a
 scene saved to a file ([M13](docs/milestones/M13.md)); `assets/scenes/` has two examples.
 
+## VivaEditor
+
+The editor ([M14](docs/milestones/M14.md)) is a second program next to the Sandbox. It opens on
+the Project Manager, where you create, open and delete projects, like Unity Hub. Editing scenes
+comes in the next milestones ([`docs/EditorRoadmap.md`](docs/EditorRoadmap.md)).
+
 ## Prerequisites
 
 | | |
@@ -44,7 +50,7 @@ needs internet access and takes a minute or so.
    per preset. Enable `windows-debug`, plus `windows-release` if you want it, either in the
    wizard that opens or later under Settings → Build, Execution, Deployment → CMake. If CLion
    also created its own `Debug` profile, you can delete it.
-3. Select the **Sandbox** run configuration and the **windows-debug** profile, then Run
+3. Select the **Sandbox** (or **VivaEditor**) run configuration and the **windows-debug** profile, then Run
    (Shift+F10) or Debug (Shift+F9).
 
 ### Command line
@@ -87,6 +93,7 @@ cmake --build --preset windows-debug
 |---|---|
 | `engine/` | The `VivaEngine` static library. `include/Viva/` is the public API. `src/` is private: `Core/`, `Platform/` (the only place for SDL3 and OS-specific code), `Renderer/` (the only place for Vulkan) and `Scene/` (GameObjects, components, transforms, model loading). |
 | `sandbox/` | The `Sandbox` executable: the Lane Runner game, and with `--demo` the engine's demo scene. It uses the engine the way any game would |
+| `editor/` | The `VivaEditor` executable: the Project Manager, and (from M15) the scene editor |
 | `cmake/` | CMake helpers: dependencies, compiler warnings, shader compilation, asset copying |
 | `shaders/` | GLSL sources, compiled to SPIR-V into `build/<preset>/bin/shaders/` |
 | `assets/` | Game assets: textures (from `scripts/make-textures.ps1`) and glTF models (credits in `assets/models/CREDITS.md`) |

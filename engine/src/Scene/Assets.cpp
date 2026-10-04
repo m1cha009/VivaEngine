@@ -1,12 +1,13 @@
 #include "Viva/Assets.h"
 
 #include "Core/ImageFile.h"
-#include "Platform/FileSystem.h"
+#include "Viva/FileSystem.h"
 #include "Viva/Log.h"
 #include "Viva/Model.h"
 #include "Viva/Primitives.h"
 
 #include <optional>
+#include <utility>
 
 namespace Viva {
 
@@ -24,8 +25,9 @@ std::optional<std::string> ModelOf(const std::string& name)
 
 } // namespace
 
-Assets::Assets(Renderer& renderer)
+Assets::Assets(Renderer& renderer, std::string rootFolder)
     : m_Renderer(renderer)
+    , m_RootFolder(std::move(rootFolder))
 {
 }
 
@@ -82,7 +84,7 @@ std::shared_ptr<Texture> Assets::GetTexture(const std::string& name)
         return texture;
 
     // The file is decoded on the CPU (stb_image, M7), and the pixels are uploaded like any others.
-    const std::optional<ImageData> image = LoadImageFile(GetAssetPath(name));
+    const std::optional<ImageData> image = LoadImageFile(GetFilePath(name));
     if (!image)
         return nullptr;
     std::shared_ptr<Texture> texture = m_Renderer.CreateTexture(image->Width, image->Height, image->Pixels, name);

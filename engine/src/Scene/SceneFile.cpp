@@ -4,8 +4,8 @@
 
 #include "Viva/Scene.h"
 
-#include "Core/Json.h"
-#include "Platform/FileSystem.h"
+#include "Viva/Json.h"
+#include "Viva/FileSystem.h"
 #include "Viva/Assets.h"
 #include "Viva/ComponentRegistry.h"
 #include "Viva/FieldVisitor.h"
@@ -384,29 +384,15 @@ bool Scene::Save(const std::string& path) const
 
 bool Scene::Load(const std::string& path, Assets& assets)
 {
-    const std::optional<std::vector<uint8_t>> bytes = ReadBinaryFile(path);
-    if (!bytes)
-        return false;
-    // The file's bytes, seen as text: UTF-8, which is what std::string holds too.
-    const std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-
     std::string error;
-    const std::optional<Json> file = ParseJson(text, error);
+    const std::optional<Json> file = ReadJsonFile(path, kFormatName, kFormatVersion, error);
     if (!file) {
-        Log::Error("{} isn't valid JSON: {}", path, error);
+        Log::Error("{}", error);
         return false;
     }
-    const Json* format = file->Find("Format");
-    const Json* version = file->Find("Version");
     const Json* gameObjects = file->Find("GameObjects");
-    if (!format || !format->AsString() || *format->AsString() != kFormatName || !version || !version->AsNumber() ||
-        !gameObjects || !gameObjects->AsArray()) {
-        Log::Error("{} isn't a VivaEngine scene file", path);
-        return false;
-    }
-    if (*version->AsNumber() > kFormatVersion) {
-        Log::Error("{} was saved in version {} of the scene format, newer than this engine's {}", path,
-                   *version->AsNumber(), kFormatVersion);
+    if (!gameObjects || !gameObjects->AsArray()) {
+        Log::Error("{} has no list of GameObjects", path);
         return false;
     }
 

@@ -18,9 +18,10 @@ namespace Viva {
 // Unity needs nothing like this: it finds every MonoBehaviour class through C#'s reflection, and
 // a scene refers to a script by its GUID. C++ can't list its classes at runtime, so each type is
 // registered once, before any scene is loaded or saved. The engine's own components (MeshRenderer,
-// Camera, Spinner) are registered already; a game registers its own, typically in OnStart:
+// Camera, Spinner, FlyCamera) are registered already; a game registers its own, typically in
+// OnStart:
 //
-//     ComponentRegistry::Register<FlyCamera>("FlyCamera");
+//     ComponentRegistry::Register<TruckWheels>("TruckWheels");
 //
 // Why not have every component register itself, from a global variable in its .cpp file? A static
 // library's code only reaches the executable if something in the game uses it, so such a file

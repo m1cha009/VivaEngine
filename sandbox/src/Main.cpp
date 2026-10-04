@@ -3,7 +3,6 @@
 
 #include "DebugWindows.h"
 #include "DemoScene.h"
-#include "FlyCamera.h"
 #include "LaneRunnerScene.h"
 #include "TruckWheels.h"
 
@@ -15,8 +14,6 @@
 #include "Viva/Scene.h"
 #include "Viva/Time.h"
 
-#include <cstdint>
-#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -31,7 +28,6 @@ constexpr const char* kDemoTitle = "VivaEngine Sandbox";
 
 // What the sandbox shows, and what it does with scene files (see main for the options).
 struct SandboxOptions {
-    float QuitAfter = 0.0f; // seconds until it quits by itself, or 0 to run until Esc or the window closes
     bool Demo = false;      // the engine's demo scene (M10, M11) instead of the Lane Runner game
     std::string LoadPath;   // a scene file to show instead of either
     std::string SavePath;   // where to save the scene once it's built
@@ -55,11 +51,9 @@ public:
 protected:
     void OnStart() override
     {
-        // The sandbox's own components that scenes use, so scene files can hold them (M13). The
-        // engine's own (MeshRenderer, Camera, Spinner) are registered already. The Lane Runner's
-        // components aren't: that game is built in code, and its road and grass are made in code
-        // too, which scene files can't refer to.
-        ComponentRegistry::Register<FlyCamera>("FlyCamera");
+        // The sandbox's own component that scenes use, so scene files can hold it (M13). The
+        // engine's own (MeshRenderer, Camera, Spinner, FlyCamera) are registered already. The Lane
+        // Runner's components aren't: that game is built in code.
         ComponentRegistry::Register<TruckWheels>("TruckWheels");
 
         if (!m_Options.LoadPath.empty()) {
@@ -85,8 +79,7 @@ protected:
     {
         m_DebugWindows.Draw(dt, GetRenderer(), GetScene());
 
-        const bool timeIsUp = m_Options.QuitAfter > 0.0f && Time::SinceStart() >= m_Options.QuitAfter;
-        if (Input::GetKeyDown(Key::Escape) || timeIsUp)
+        if (Input::GetKeyDown(Key::Escape))
             Quit();
     }
 
@@ -109,27 +102,20 @@ private:
 
 int main(int argc, char* argv[])
 {
-    // Command-line options, mostly for testing:
+    // Command-line options, mostly for testing. ReadCommandLine takes the ones every program has
+    // (--display <n>, --no-vsync, --quit-after <sec>; see Viva/Application.h). The Sandbox's own:
     //   --test-assert        fail an assert on purpose (Debug builds), to see what that looks like
-    //   --quit-after <sec>   quit by itself after that many seconds (used by CI and scripted tests)
-    //   --no-vsync           draw as fast as possible instead of waiting for the display
-    //   --display <n>        open the window on monitor n (0 is usually the main one)
     //   --demo               show the engine's demo scene instead of the game
     //   --load <file>        show the scene saved in that file instead (M13)
     //   --save <file>        save the scene into that file once it's built (M13)
     ApplicationSettings settings { .Title = kTitle };
+    settings.ReadCommandLine(argc, argv);
     SandboxOptions options;
     bool testAssert = false;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg = argv[i];
         if (arg == "--test-assert")
             testAssert = true;
-        else if (arg == "--quit-after" && i + 1 < argc)
-            options.QuitAfter = std::strtof(argv[++i], nullptr);
-        else if (arg == "--no-vsync")
-            settings.VSync = false;
-        else if (arg == "--display" && i + 1 < argc)
-            settings.Display = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
         else if (arg == "--demo")
             options.Demo = true;
         else if (arg == "--load" && i + 1 < argc)

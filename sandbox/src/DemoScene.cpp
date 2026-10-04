@@ -1,10 +1,10 @@
 #include "DemoScene.h"
 
-#include "FlyCamera.h"
 #include "TruckWheels.h"
 
 #include "Viva/Assets.h"
 #include "Viva/Camera.h"
+#include "Viva/FlyCamera.h"
 #include "Viva/MeshRenderer.h"
 #include "Viva/Model.h"
 #include "Viva/Primitives.h"

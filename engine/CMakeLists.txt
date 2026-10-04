@@ -11,10 +11,12 @@ add_library(VivaEngine STATIC
     src/Core/Json.cpp
     src/Core/Log.cpp
     src/Core/Primitives.cpp
+    src/Core/Project.cpp
     src/Core/Time.cpp
     src/Core/Version.cpp
     src/Platform/Debugger.cpp
     src/Platform/FileSystem.cpp
+    src/Platform/FolderDialog.cpp
     src/Platform/Input.cpp
     src/Platform/SDLVersion.cpp
     src/Platform/Window.cpp
@@ -41,6 +43,7 @@ add_library(VivaEngine STATIC
     src/Scene/Component.cpp
     src/Scene/ComponentRegistry.cpp
     src/Scene/FieldVisitor.cpp
+    src/Scene/FlyCamera.cpp
     src/Scene/GameObject.cpp
     src/Scene/Model.cpp
     src/Scene/Scene.cpp

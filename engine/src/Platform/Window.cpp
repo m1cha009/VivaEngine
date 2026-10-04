@@ -1,5 +1,6 @@
 #include "Platform/Window.h"
 
+#include "Platform/FolderDialog.h"
 #include "Platform/InputEvents.h"
 #include "Viva/Log.h"
 
@@ -135,6 +136,8 @@ void Window::PollEvents()
     SDL_Event event;
     while (SDL_PollEvent(&event))
         HandleEvent(event);
+    // Folder dialogs that closed since the last frame call back now, on the main thread.
+    DeliverFolderDialogResults();
 }
 
 void Window::WaitForEvent() const

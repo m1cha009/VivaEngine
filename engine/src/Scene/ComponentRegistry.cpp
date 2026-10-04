@@ -2,6 +2,7 @@
 
 #include "Viva/Assert.h"
 #include "Viva/Camera.h"
+#include "Viva/FlyCamera.h"
 #include "Viva/MeshRenderer.h"
 #include "Viva/Spinner.h"
 
@@ -40,6 +41,7 @@ void ComponentRegistry::RegisterEngineComponents()
     Register<MeshRenderer>("MeshRenderer");
     Register<Camera>("Camera");
     Register<Spinner>("Spinner");
+    Register<FlyCamera>("FlyCamera");
 }
 
 void ComponentRegistry::Register(std::string name, std::type_index type, Factory factory)

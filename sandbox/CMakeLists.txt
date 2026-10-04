@@ -3,7 +3,6 @@
 add_executable(Sandbox
     src/DebugWindows.cpp
     src/DemoScene.cpp
-    src/FlyCamera.cpp
     src/FollowCamera.cpp
     src/LaneRunner.cpp
     src/LaneRunnerScene.cpp

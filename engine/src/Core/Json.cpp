@@ -1,4 +1,6 @@
-#include "Core/Json.h"
+#include "Viva/Json.h"
+
+#include "Viva/FileSystem.h"
 
 #include <charconv>
 #include <cmath>
@@ -402,6 +404,37 @@ std::string WriteJson(const Json& value)
     WriteValue(out, value, 0);
     out += '\n';
     return out;
+}
+
+std::optional<Json> ReadJsonFile(const std::string& path, std::string_view format, double version, std::string& error)
+{
+    const std::optional<std::string> text = ReadTextFile(path);
+    if (!text) {
+        error = std::format("Couldn't read {}.", path);
+        return std::nullopt;
+    }
+    std::string parseError;
+    std::optional<Json> json = ParseJson(*text, parseError);
+    if (!json) {
+        error = std::format("{} isn't valid JSON: {}", path, parseError);
+        return std::nullopt;
+    }
+    if (format.empty())
+        return json;
+
+    const Json* fileFormat = json->Find("Format");
+    const Json* fileVersion = json->Find("Version");
+    if (!fileFormat || !fileFormat->AsString() || *fileFormat->AsString() != format || !fileVersion ||
+        !fileVersion->AsNumber()) {
+        error = std::format("{} isn't a {} file.", path, format);
+        return std::nullopt;
+    }
+    if (*fileVersion->AsNumber() > version) {
+        error = std::format("{} was saved in version {} of the {} format, newer than this engine's {}.", path,
+                            *fileVersion->AsNumber(), format, version);
+        return std::nullopt;
+    }
+    return json;
 }
 
 } // namespace Viva

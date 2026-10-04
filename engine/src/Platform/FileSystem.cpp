@@ -1,4 +1,4 @@
-#include "Platform/FileSystem.h"
+#include "Viva/FileSystem.h"
 
 #include "Viva/Log.h"
 
@@ -6,6 +6,8 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_stdinc.h>
+
+#include <algorithm>
 
 namespace Viva {
 
@@ -17,10 +19,34 @@ std::string GetExecutableDirectory()
     return basePath ? basePath : "";
 }
 
-std::string GetAssetPath(const std::string& relativePath)
+std::string GetUserDataFolder(const std::string& organization, const std::string& application)
 {
-    // "/" works as a separator on Windows too.
-    return GetExecutableDirectory() + "assets/" + relativePath;
+    // SDL_GetPrefPath creates the folder if needed. The string is ours to free.
+    char* path = SDL_GetPrefPath(organization.c_str(), application.c_str());
+    if (!path) {
+        Log::Error("There's no folder for the user's settings: {}", SDL_GetError());
+        return {};
+    }
+    std::string result = path;
+    SDL_free(path);
+    return result;
+}
+
+std::string GetDocumentsFolder()
+{
+    // This string belongs to SDL: no SDL_free.
+    const char* path = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+    return path ? path : "";
+}
+
+std::string NormalizePath(std::string_view path)
+{
+    std::string result(path);
+    std::replace(result.begin(), result.end(), '\\', '/');
+    // A drive's root keeps its slash: "C:/", not "C:".
+    while (result.size() > 1 && result.back() == '/' && !(result.size() == 3 && result[1] == ':'))
+        result.pop_back();
+    return result;
 }
 
 std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path)
@@ -41,6 +67,15 @@ std::optional<std::vector<uint8_t>> ReadBinaryFile(const std::string& path)
     return result;
 }
 
+std::optional<std::string> ReadTextFile(const std::string& path)
+{
+    const std::optional<std::vector<uint8_t>> bytes = ReadBinaryFile(path);
+    if (!bytes)
+        return std::nullopt;
+    // The bytes are UTF-8 text, which is what std::string holds too.
+    return std::string(bytes->begin(), bytes->end());
+}
+
 bool WriteTextFile(const std::string& path, std::string_view text)
 {
     // SDL_SaveFile is SDL_LoadFile's opposite: the whole file in one go, from a UTF-8 path.
@@ -49,6 +84,65 @@ bool WriteTextFile(const std::string& path, std::string_view text)
         return false;
     }
     return true;
+}
+
+bool PathExists(const std::string& path)
+{
+    return SDL_GetPathInfo(path.c_str(), nullptr);
+}
+
+bool IsFolder(const std::string& path)
+{
+    SDL_PathInfo info;
+    return SDL_GetPathInfo(path.c_str(), &info) && info.type == SDL_PATHTYPE_DIRECTORY;
+}
+
+bool CreateFolder(const std::string& path)
+{
+    // Creates the missing folders above it too, and succeeds if it exists already.
+    if (!SDL_CreateDirectory(path.c_str())) {
+        Log::Error("Couldn't create the folder {}: {}", path, SDL_GetError());
+        return false;
+    }
+    return true;
+}
+
+std::vector<std::string> ListFolder(const std::string& path)
+{
+    // SDL calls the function below once per entry. It's a C callback: a plain function (a lambda
+    // that captures nothing converts to one), with the list passed through the void* "userdata"
+    // pointer, the way C APIs hand state to callbacks.
+    std::vector<std::string> names;
+    const auto addName = [](void* userdata, const char* /*folder*/, const char* name) {
+        static_cast<std::vector<std::string>*>(userdata)->push_back(name);
+        return SDL_ENUM_CONTINUE;
+    };
+    if (!SDL_EnumerateDirectory(path.c_str(), addName, &names))
+        return {};
+    return names;
+}
+
+bool DeleteFolder(const std::string& path)
+{
+    // SDL only removes empty folders, so the contents go first: files directly, folders by this
+    // same function (recursion, as in Model::Instantiate). Symbolic links are followed by
+    // SDL_GetPathInfo, so a link to a folder would empty the folder it points to; projects don't
+    // have any.
+    bool deleted = true;
+    for (const std::string& name : ListFolder(path)) {
+        const std::string entry = path + "/" + name;
+        if (IsFolder(entry)) {
+            deleted = DeleteFolder(entry) && deleted;
+        } else if (!SDL_RemovePath(entry.c_str())) {
+            Log::Error("Couldn't delete {}: {}", entry, SDL_GetError());
+            deleted = false;
+        }
+    }
+    if (!SDL_RemovePath(path.c_str())) {
+        Log::Error("Couldn't delete the folder {}: {}", path, SDL_GetError());
+        return false;
+    }
+    return deleted;
 }
 
 } // namespace Viva

@@ -31,6 +31,10 @@ public:
     // updates, before drawing (Unity's Destroy). Any pointer or reference to them is invalid after
     // that: the game must forget them.
     void Destroy(GameObject& gameObject);
+    // Destroys every GameObject, the same way: they're gone at the end of this frame's updates.
+    // Objects created after this call stay. Loading another scene file after it replaces the
+    // scene (Unity's LoadScene in its default, single mode).
+    void Clear();
 
     // Whether a GameObject is still in this scene. A destroyed one leaves at the end of the frame
     // it was destroyed in. Only the pointer is compared, so it's safe to ask about an object that's

@@ -1,6 +1,6 @@
 # Using VivaEngine
 
-How to build, run and make things with the engine, as of M13. The milestone docs in
+How to build, run and make things with the engine, as of M14. The milestone docs in
 [`milestones/`](milestones/) explain *why* things work the way they do; this page is the
 practical summary.
 
@@ -39,6 +39,16 @@ build\windows-debug\bin\Sandbox.exe
 - **A release folder you can share:** `scripts\package.cmd MyBuild` puts it in `dist\MyBuild\`.
 - **Debug builds** run the Vulkan validation layer; its errors show up in the log.
 - **F1** shows the Stats window and the Scene window (hierarchy and inspector).
+
+## The editor (VivaEditor)
+
+`build\windows-debug\bin\VivaEditor.exe` (or the **VivaEditor** run configuration in CLion)
+opens the **Project Manager**, like Unity Hub: create a project, open it, remove it from the list
+or delete it from disk. A project is a folder with a `.vivaproject` file, an `Assets` folder (asset
+names start there) and `Scenes/Main.scene`. Opening one shows its startup scene, to fly through;
+editing comes with M15–M17 ([`EditorRoadmap.md`](EditorRoadmap.md)). Options: `--open <folder>`,
+`--settings <folder>` (where the project list lives, normally `%APPDATA%\Viva\VivaEditor`), and
+the common `--display`, `--no-vsync` and `--quit-after`. See [M14](milestones/M14.md).
 
 ## Making something with it
 
@@ -152,8 +162,8 @@ and `"Primitives::Cylinder"`. Credits for third-party assets go in a `CREDITS.md
 
 - No lighting or shadows: everything is unlit, opaque texture × color.
 - No physics (collisions are your own box tests), audio, animation or skinning.
-- No editor yet: scenes are built in code or written as files by hand (M14–M18 add projects and
-  the editor; see [`EditorRoadmap.md`](EditorRoadmap.md)).
+- The editor only views projects so far: scenes are built in code or written as files by hand
+  (M15–M18 add editing; see [`EditorRoadmap.md`](EditorRoadmap.md)).
 - One built-in shader (Unlit); games can't add their own yet.
 - Mirrored (negative scale) objects draw inside out.
 
@@ -162,8 +172,8 @@ The rest are the "Beyond M18" options in [`CLAUDE.md`](../CLAUDE.md).
 ## Where to read more
 
 - **Each milestone explained**, with Unity comparisons: [`milestones/M0.md`](milestones/M0.md) to
-  [`M13.md`](milestones/M13.md). M8 (renderer), M10 (scene), M11 (models) and M13 (assets, scene
-  files) matter most for using the engine.
+  [`M14.md`](milestones/M14.md). M8 (renderer), M10 (scene), M11 (models), M13 (assets, scene
+  files) and M14 (projects) matter most for using the engine.
 - **Complete examples:** `sandbox/src/DemoScene.cpp` and `sandbox/src/LaneRunnerScene.cpp` in code,
   `assets/scenes/Shapes.scene` and `Demo.scene` as files.
 - **Every public header** in `engine/include/Viva/` is commented for exactly this use.

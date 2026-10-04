@@ -4,10 +4,10 @@
 
 #include "DebugWindows.h"
 
-#include "FlyCamera.h"
 #include "TruckWheels.h"
 
 #include "Viva/Camera.h"
+#include "Viva/FlyCamera.h"
 #include "Viva/Input.h"
 #include "Viva/Log.h"
 #include "Viva/MeshRenderer.h"

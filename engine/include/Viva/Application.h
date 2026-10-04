@@ -26,6 +26,16 @@ struct ApplicationSettings {
     // Which monitor the window opens on, counting from 0 in the order the OS lists them (0 is
     // usually the main one). An index with no monitor falls back to the main one.
     uint32_t Display = 0;
+    // Quit by itself after this many seconds, or 0 to run until Quit() or the window closes. For
+    // scripted tests.
+    float QuitAfter = 0.0f;
+
+    // Reads the options every program understands from its command line, and leaves the others
+    // for the program to read:
+    //   --display <n>       Display
+    //   --no-vsync          VSync off
+    //   --quit-after <sec>  QuitAfter
+    void ReadCommandLine(int argc, char* argv[]);
 };
 
 // The base class of a game. It owns the window and the main loop. A game derives from it and
@@ -81,9 +91,13 @@ protected:
     // Viva/Renderer.h.
     Renderer& GetRenderer() { return *m_Renderer; }
 
-    // The assets: meshes, textures, materials and models by name (see Viva/Assets.h), from
-    // OnStart on.
+    // The assets: meshes, textures, materials and models by name (see Viva/Assets.h), from OnStart
+    // on. Their names start in the assets folder next to the executable, unless SetAssetsFolder
+    // says otherwise.
     Assets& GetAssets() { return *m_Assets; }
+    // Makes asset names start in `folder` (ending with a separator), for example a project's Assets
+    // folder: a fresh Assets replaces the old one. What's loaded already stays while it's used.
+    void SetAssetsFolder(const std::string& folder);
 
     // The scene: the GameObjects that make up the game world, from OnStart to OnShutdown. It's
     // drawn from its main camera every frame (see Viva/Scene.h).

@@ -5,6 +5,7 @@
 #include "Platform/Window.h"
 #include "Renderer/VulkanVersion.h"
 #include "Viva/Assets.h"
+#include "Viva/FileSystem.h"
 #include "Viva/Log.h"
 #include "Viva/Renderer.h"
 #include "Viva/Scene.h"
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <string_view>
 #include <utility>
 
 namespace Viva {
@@ -28,6 +30,19 @@ namespace {
 constexpr float kMaxDeltaTime = 0.25f;
 
 } // namespace
+
+void ApplicationSettings::ReadCommandLine(int argc, char* argv[])
+{
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view arg = argv[i];
+        if (arg == "--display" && i + 1 < argc)
+            Display = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+        else if (arg == "--no-vsync")
+            VSync = false;
+        else if (arg == "--quit-after" && i + 1 < argc)
+            QuitAfter = std::strtof(argv[++i], nullptr);
+    }
+}
 
 Application::Application(ApplicationSettings settings)
     : m_Settings(std::move(settings))
@@ -56,7 +71,7 @@ int Application::Run()
     m_Renderer = Renderer::Create(*m_Window, m_Settings.VSync);
     if (!m_Renderer)
         return EXIT_FAILURE;
-    m_Assets = std::make_unique<Assets>(*m_Renderer);
+    SetAssetsFolder(GetExecutableDirectory() + "assets/");
 
     m_Scene = std::make_unique<Scene>();
     OnStart();
@@ -75,6 +90,8 @@ int Application::Run()
         // here, so a key press that arrives during a pass that can't draw isn't lost.)
         m_Window->PollEvents();
         if (m_Window->ShouldClose())
+            m_QuitRequested = true;
+        if (m_Settings.QuitAfter > 0.0f && Time::SinceStart() >= m_Settings.QuitAfter)
             m_QuitRequested = true;
 
         if (!drawing) {
@@ -143,6 +160,11 @@ int Application::Run()
     // components' destructors can still use both.
     m_Scene.reset();
     return EXIT_SUCCESS;
+}
+
+void Application::SetAssetsFolder(const std::string& folder)
+{
+    m_Assets = std::make_unique<Assets>(*m_Renderer, folder);
 }
 
 void Application::Quit()
